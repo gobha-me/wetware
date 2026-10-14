@@ -876,6 +876,49 @@ bool MegacitySimulation::apply_command(const SimulationCommand& cmd) {
     return true;
   }
 
+  if (const auto* sab = std::get_if<CommandSabotageTransformer>(&cmd)) {
+    const auto* syn = find_syndicate(sab->syndicate_id);
+    auto* dist = find_district_mut(sab->district_id);
+    if (syn == nullptr || dist == nullptr ||
+        sab->operative_index >= syn->squad.size()) {
+      return false;
+    }
+    const auto& op = syn->squad.at(sab->operative_index);
+    if (!op.alive || op.current_stratum != Stratum::UnderGrid ||
+        !dist->transformer_intact) {
+      return false;
+    }
+    dist->transformer_intact = false;
+    dist->power_blackout = true;
+    dist->security_budget =
+        (dist->security_budget > 30U) ? (dist->security_budget - 30U) : 0U;
+    return true;
+  }
+
+  if (const auto* convoy = std::get_if<CommandInterceptExecutiveConvoy>(&cmd)) {
+    auto* syn = find_syndicate_mut(convoy->syndicate_id);
+    auto* dist = find_district_mut(convoy->district_id);
+    if (syn == nullptr || dist == nullptr ||
+        convoy->operative_index >= syn->squad.size()) {
+      return false;
+    }
+    const auto& op = syn->squad.at(convoy->operative_index);
+    if (!op.alive || op.current_stratum != Stratum::Street ||
+        !dist->executive_convoy_active) {
+      return false;
+    }
+    dist->executive_convoy_active = false;
+    syn->treasury += 1500;
+    if (!blueprints_.empty()) {
+      apply_command(CommandSalvageFieldHardware{
+          .syndicate_id = syn->id,
+          .blueprint_id = blueprints_.front().id,
+          .quantity = 1,
+      });
+    }
+    return true;
+  }
+
   return false;
 }
 
@@ -1233,6 +1276,8 @@ std::uint64_t MegacitySimulation::state_digest() const noexcept {
     hash = fnv1a_mix(hash, dist.owner_syndicate);
     hash = fnv1a_mix(hash, dist.power_blackout ? 1ULL : 0ULL);
     hash = fnv1a_mix(hash, dist.crowd_surge_active ? 1ULL : 0ULL);
+    hash = fnv1a_mix(hash, dist.transformer_intact ? 1ULL : 0ULL);
+    hash = fnv1a_mix(hash, dist.executive_convoy_active ? 1ULL : 0ULL);
     hash = fnv1a_mix(hash, dist.sleeper_vision_syndicate);
     hash = fnv1a_mix(hash, dist.monorail_wreck_lootable ? 1ULL : 0ULL);
   }
@@ -1312,6 +1357,10 @@ std::string MegacitySimulation::export_snapshot_json() const {
            std::string(dist.power_blackout ? "true" : "false") + ",\n";
     out += "      \"crowd_surge_active\": " +
            std::string(dist.crowd_surge_active ? "true" : "false") + ",\n";
+    out += "      \"transformer_intact\": " +
+           std::string(dist.transformer_intact ? "true" : "false") + ",\n";
+    out += "      \"executive_convoy_active\": " +
+           std::string(dist.executive_convoy_active ? "true" : "false") + ",\n";
     out += "      \"sleeper_vision_syndicate\": " +
            std::to_string(dist.sleeper_vision_syndicate) + ",\n";
     out += "      \"monorail_wreck_lootable\": " +
@@ -1442,6 +1491,8 @@ MegacitySimulation create_default_vertical_slice(SessionMode mode) {
       .power_blackout = false,
       .monorail_wreck_lootable = false,
       .crowd_surge_active = false,
+      .transformer_intact = true,
+      .executive_convoy_active = true,
       .sleeper_vision_syndicate = 0,
       .monorail_vault_loot = 0,
       .security_budget = 120,
@@ -1476,6 +1527,8 @@ MegacitySimulation create_default_vertical_slice(SessionMode mode) {
       .power_blackout = false,
       .monorail_wreck_lootable = false,
       .crowd_surge_active = false,
+      .transformer_intact = true,
+      .executive_convoy_active = true,
       .sleeper_vision_syndicate = 0,
       .monorail_vault_loot = 0,
       .security_budget = 100,
@@ -1493,6 +1546,8 @@ MegacitySimulation create_default_vertical_slice(SessionMode mode) {
       .power_blackout = false,
       .monorail_wreck_lootable = false,
       .crowd_surge_active = false,
+      .transformer_intact = true,
+      .executive_convoy_active = true,
       .sleeper_vision_syndicate = 0,
       .monorail_vault_loot = 0,
       .security_budget = 90,

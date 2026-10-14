@@ -257,6 +257,8 @@ struct DistrictState {
   bool power_blackout{false};
   bool monorail_wreck_lootable{false};
   bool crowd_surge_active{false};
+  bool transformer_intact{true};
+  bool executive_convoy_active{true};
   SyndicateId sleeper_vision_syndicate{0};
   Credits monorail_vault_loot{0};
   std::uint32_t security_budget{100};
@@ -365,12 +367,25 @@ struct CommandLootMonorailWreck {
   DistrictId district_id{0};
 };
 
+struct CommandSabotageTransformer {
+  SyndicateId syndicate_id{0};
+  std::size_t operative_index{0};
+  DistrictId district_id{0};
+};
+
+struct CommandInterceptExecutiveConvoy {
+  SyndicateId syndicate_id{0};
+  std::size_t operative_index{0};
+  DistrictId district_id{0};
+};
+
 using SimulationCommand = std::variant<
     CommandSetBiochem, CommandTriggerOverclock, CommandShearColumns,
     CommandFundRebuild, CommandAllocateResearch, CommandSalvageFieldHardware,
     CommandUseSalvage, CommandTraverseVerticalShaft, CommandBreachFloorSlab,
     CommandFireOrdinance, CommandExtractCorpseSalvage,
-    CommandTriggerThrallDirective, CommandLootMonorailWreck>;
+    CommandTriggerThrallDirective, CommandLootMonorailWreck,
+    CommandSabotageTransformer, CommandInterceptExecutiveConvoy>;
 
 class MegacitySimulation {
  public:

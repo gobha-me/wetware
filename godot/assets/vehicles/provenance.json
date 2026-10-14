@@ -48,6 +48,187 @@
         "monorail_armored_car_iso8_emissive.png"
       ],
       "dimensions": "1024x128 (8 frames @ 128x128 orthographic 2:1 isometric)"
+    },
+    {
+      "id": "corp_security_interceptor",
+      "preview_task_id": "01a13ba5-8af2-70fc-9e91-c4cf28cdfa5f",
+      "refine_task_id": "01a13ba6-7e63-7580-b511-e91cdec02393",
+      "outputs": [
+        "corp_security_interceptor_iso8_albedo.png",
+        "corp_security_interceptor_iso8_normal.png",
+        "corp_security_interceptor_iso8_emissive.png"
+      ],
+      "dimensions": "1024x128 (8 frames @ 128x128 orthographic 2:1 isometric)"
+    },
+    {
+      "id": "executive_armored_limo",
+      "preview_task_id": "01a13ba5-aab8-733d-b0c9-36a7c2d02e60",
+      "refine_task_id": "01a13ba6-a15c-73b0-aa9a-bc9c69c8ef82",
+      "outputs": [
+        "executive_armored_limo_iso8_albedo.png",
+        "executive_armored_limo_iso8_normal.png",
+        "executive_armored_limo_iso8_emissive.png"
+      ],
+      "dimensions": "1024x128 (8 frames @ 128x128 orthographic 2:1 isometric)"
+    },
+    {
+      "id": "heavy_riot_bulldozer",
+      "preview_task_id": "01a13ba5-953a-744a-b729-73fb14d26d95",
+      "refine_task_id": "01a13ba6-8d25-7673-ae21-d3722c863be6",
+      "outputs": [
+        "heavy_riot_bulldozer_iso8_albedo.png",
+        "heavy_riot_bulldozer_iso8_normal.png",
+        "heavy_riot_bulldozer_iso8_emissive.png"
+      ],
+      "dimensions": "1024x128 (8 frames @ 128x128 orthographic 2:1 isometric)"
+    },
+    {
+      "id": "autonomous_cargo_hauler",
+      "preview_task_id": "01a13ba5-d741-725b-ab54-d7a7addd7461",
+      "refine_task_id": "01a13ba7-9378-73c1-9772-04c845398234",
+      "outputs": [
+        "autonomous_cargo_hauler_iso8_albedo.png",
+        "autonomous_cargo_hauler_iso8_normal.png",
+        "autonomous_cargo_hauler_iso8_emissive.png"
+      ],
+      "dimensions": "1024x128 (8 frames @ 128x128 orthographic 2:1 isometric)"
+    },
+    {
+      "id": "quad_hunter_killer_drone",
+      "preview_task_id": "01a13ba8-5542-7100-a961-fad4c31b3e60",
+      "refine_task_id": "01a13ba9-f3cd-7747-bb44-a4f88d498753",
+      "outputs": [
+        "quad_hunter_killer_drone_iso8_albedo.png",
+        "quad_hunter_killer_drone_iso8_normal.png",
+        "quad_hunter_killer_drone_iso8_emissive.png"
+      ],
+      "dimensions": "1024x128 (8 frames @ 128x128 orthographic 2:1 isometric)"
+    },
+    {
+      "id": "hazmat_decon_rig",
+      "preview_task_id": "01a13ba5-cb63-75d8-a830-a62ca8bc60a6",
+      "refine_task_id": "01a13ba8-94a8-73cf-8380-ea5e69429f5b",
+      "outputs": [
+        "hazmat_decon_rig_iso8_albedo.png",
+        "hazmat_decon_rig_iso8_normal.png",
+        "hazmat_decon_rig_iso8_emissive.png"
+      ],
+      "dimensions": "1024x128 (8 frames @ 128x128 orthographic 2:1 isometric)"
+    },
+    {
+      "id": "cyber_clinic_med_pod",
+      "preview_task_id": "01a13ba9-5dd1-7552-a6e7-9e5ab126a1f3",
+      "refine_task_id": "01a13baa-be2a-7788-960a-7a476eb67368",
+      "outputs": [
+        "cyber_clinic_med_pod_iso8_albedo.png",
+        "cyber_clinic_med_pod_iso8_normal.png",
+        "cyber_clinic_med_pod_iso8_emissive.png"
+      ],
+      "dimensions": "1024x128 (8 frames @ 128x128 orthographic 2:1 isometric)"
+    },
+    {
+      "id": "high_voltage_transformer_bank",
+      "preview_task_id": "01a13ba9-ab78-76f9-8271-721b9a62310a",
+      "refine_task_id": "01a13bac-dbee-74a5-9e7d-8a17b4dfd04b",
+      "outputs": [
+        "high_voltage_transformer_bank_iso8_albedo.png",
+        "high_voltage_transformer_bank_iso8_normal.png",
+        "high_voltage_transformer_bank_iso8_emissive.png"
+      ],
+      "dimensions": "1024x128 (8 frames @ 128x128 orthographic 2:1 isometric)"
+    },
+    {
+      "id": "concrete_riot_barricade",
+      "preview_task_id": "01a13bab-8421-735d-acc7-1e7d86491495",
+      "refine_task_id": "01a13bac-9d41-72da-a9df-e6468e8749cd",
+      "outputs": [
+        "concrete_riot_barricade_iso8_albedo.png",
+        "concrete_riot_barricade_iso8_normal.png",
+        "concrete_riot_barricade_iso8_emissive.png"
+      ],
+      "dimensions": "1024x128 (8 frames @ 128x128 orthographic 2:1 isometric)"
+    },
+    {
+      "id": "automated_checkpoint_gate",
+      "preview_task_id": "01a13bac-5e35-7404-bb19-f8904fdef8ce",
+      "refine_task_id": "01a13bad-4ed9-7707-a258-9d23c7f42da6",
+      "outputs": [
+        "automated_checkpoint_gate_iso8_albedo.png",
+        "automated_checkpoint_gate_iso8_normal.png",
+        "automated_checkpoint_gate_iso8_emissive.png"
+      ],
+      "dimensions": "1024x128 (8 frames @ 128x128 orthographic 2:1 isometric)"
+    },
+    {
+      "id": "cryo_stasis_vat",
+      "preview_task_id": "01a13bad-9e98-7642-8a90-31a07a642fda",
+      "refine_task_id": "01a13bae-7fba-7290-8579-367fda315e23",
+      "outputs": [
+        "cryo_stasis_vat_iso8_albedo.png",
+        "cryo_stasis_vat_iso8_normal.png",
+        "cryo_stasis_vat_iso8_emissive.png"
+      ],
+      "dimensions": "1024x128 (8 frames @ 128x128 orthographic 2:1 isometric)"
+    },
+    {
+      "id": "street_vending_machine_bank",
+      "preview_task_id": "01a13bac-0a10-72d0-9f2a-e796a457e3b6",
+      "refine_task_id": "01a13bad-93bd-73ab-b5e0-f71a9711ec03",
+      "outputs": [
+        "street_vending_machine_bank_iso8_albedo.png",
+        "street_vending_machine_bank_iso8_normal.png",
+        "street_vending_machine_bank_iso8_emissive.png"
+      ],
+      "dimensions": "1024x128 (8 frames @ 128x128 orthographic 2:1 isometric)"
+    },
+    {
+      "id": "rooftop_hvac_cooling_tower",
+      "preview_task_id": "01a13bad-f757-700d-8f3d-ac5bba629cbf",
+      "refine_task_id": "01a13bb0-323e-7005-8270-5b8205b8c3d6",
+      "outputs": [
+        "rooftop_hvac_cooling_tower_iso8_albedo.png",
+        "rooftop_hvac_cooling_tower_iso8_normal.png",
+        "rooftop_hvac_cooling_tower_iso8_emissive.png"
+      ],
+      "dimensions": "1024x128 (8 frames @ 128x128 orthographic 2:1 isometric)"
+    }
+  ],
+  "rejected_candidates": [
+    {
+      "id": "railgun_defense_turret",
+      "preview_task_id": "01a13ba8-49bd-7119-a37e-e2f49a8015f0",
+      "refine_task_id": "01a13baa-3bcc-72a4-b2bb-8d072937a277",
+      "reason": "Hallucinated helicopter rotor blade on top of turret housing."
+    },
+    {
+      "id": "bipedal_security_walker",
+      "preview_task_id": "01a13ba9-13b4-716c-bfa5-ef8839af9406",
+      "refine_task_id": "01a13bab-7a49-7736-9cd7-34e6d63e32d8",
+      "reason": "Hallucinated bidirectional gun barrels and third central leg."
+    },
+    {
+      "id": "holographic_billboard_pylon",
+      "preview_task_id": "01a13baa-c8fe-7176-9189-7920c03d64a0",
+      "refine_task_id": "01a13bab-feca-7501-b78b-eee7bb0e6de7",
+      "reason": "Disconnected floating ring geometry detached from pylon."
+    },
+    {
+      "id": "street_noodle_kiosk_truck",
+      "preview_task_id": "01a13ba5-c180-715e-96f2-a6fd3381c1ab",
+      "refine_task_id": "01a13ba7-553d-74ef-80e3-0fb92a7e3575",
+      "reason": "Garbled 3D pseudo-character blobs on roof sign and vintage van silhouette."
+    },
+    {
+      "id": "syndicate_hover_bike",
+      "preview_task_id": "01a13ba5-b54a-74af-ad52-122273c3b5d9",
+      "refine_task_id": "01a13ba6-ae32-73e4-9961-7bdedb0404f8",
+      "reason": "Conventional spoked-wheel chain-drive motorcycle instead of enclosed cyberpunk hover/hubless chassis."
+    },
+    {
+      "id": "trauma_medevac_van",
+      "preview_task_id": "01a13ba5-a035-7268-a668-31f15f45b551",
+      "refine_task_id": "01a13ba6-9785-72d6-8721-feb009b47963",
+      "reason": "Reads as civilian camper van rather than armored cyberpunk trauma transport."
     }
   ]
 }
