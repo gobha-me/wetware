@@ -266,6 +266,73 @@ void test_ordinance_strike_and_corpse_wetware_extraction() {
           "SatelliteRain collapses Building 10 across all strata");
 }
 
+void test_thrall_directives_and_monorail_wreck_loot() {
+  auto sim = wetware::create_default_vertical_slice();
+
+  // Upgrade Player operative 0 (KESTREL-1) Brain to V4 and persuade a Police
+  // officer and an Executive in District 2
+  auto* player = sim.find_syndicate_mut(1);
+  require(player != nullptr, "Player exists");
+  player->squad.at(0).set_organ_tier(wetware::OrganSlot::Brain,
+                                     wetware::CyberTier::V4);
+  player->squad.at(0).sliders.intelligence = 1.0;
+
+  require(sim.attempt_persuade(1, 0, 7002, wetware::PersuadeTargetClass::Police,
+                               2, wetware::Stratum::Street,
+                               wetware::ThrallDirective::CrowdSurge),
+          "Persuade Police for CrowdSurge in District 2");
+  require(sim.attempt_persuade(1, 0, 7003,
+                               wetware::PersuadeTargetClass::CorporateGuard, 2,
+                               wetware::Stratum::Street,
+                               wetware::ThrallDirective::DeadManBroadcast),
+          "Persuade CorporateGuard for DeadManBroadcast in District 2");
+  require(sim.attempt_persuade(
+              1, 0, 7001, wetware::PersuadeTargetClass::Executive, 2,
+              wetware::Stratum::Spire, wetware::ThrallDirective::SleeperNode),
+          "Chain-persuade Executive as SleeperNode in District 2");
+
+  // Trigger SleeperNode
+  require(sim.apply_command(wetware::CommandTriggerThrallDirective{
+              .syndicate_id = 1, .actor_id = 7001, .target_building_id = 0}),
+          "Trigger SleeperNode in District 2");
+  require(sim.find_district(2)->sleeper_vision_syndicate == 1,
+          "District 2 sleeper vision granted to Syndicate 1");
+
+  // Trigger CrowdSurge
+  require(sim.apply_command(wetware::CommandTriggerThrallDirective{
+              .syndicate_id = 1, .actor_id = 7002, .target_building_id = 0}),
+          "Trigger CrowdSurge in District 2");
+  require(sim.find_district(2)->crowd_surge_active,
+          "CrowdSurge is active in District 2");
+
+  // Trigger DeadManBroadcast (detonates thrall and damages Building 20)
+  require(sim.apply_command(wetware::CommandTriggerThrallDirective{
+              .syndicate_id = 1, .actor_id = 7003, .target_building_id = 20}),
+          "Trigger DeadManBroadcast in District 2");
+  require(sim.find_district(2)->security_budget == 60,
+          "DeadManBroadcast reduces District 2 security budget by 40");
+  require(player->thralls.size() == 2,
+          "DeadManBroadcast consumes the detonated thrall");
+
+  // Collapse Chiba Monorail Hub (Building 21 in District 3) and loot wreck
+  require(sim.apply_command(
+              wetware::CommandShearColumns{.building_id = 21,
+                                           .stratum = wetware::Stratum::Street,
+                                           .columns_destroyed = 4}),
+          "Shear Chiba Monorail Hub columns");
+  require(sim.find_district(3)->monorail_wreck_lootable,
+          "Chiba Monorail wreck is lootable on Street stratum");
+
+  const wetware::Credits before_loot = player->treasury;
+  require(sim.apply_command(wetware::CommandLootMonorailWreck{
+              .syndicate_id = 1, .operative_index = 1, .district_id = 3}),
+          "Player operative VEX-2 loots derailed monorail vault on Street");
+  require(player->treasury == before_loot + 2500,
+          "Monorail vault credits transferred to Player treasury");
+  require(!sim.find_district(3)->monorail_wreck_lootable,
+          "Monorail wreck marked looted");
+}
+
 } // namespace
 
 int main() {
@@ -276,6 +343,7 @@ int main() {
   test_rival_ai_controller();
   test_deterministic_command_replay();
   test_ordinance_strike_and_corpse_wetware_extraction();
+  test_thrall_directives_and_monorail_wreck_loot();
   std::cout << "All wetware C++23 simulation tests passed.\n";
   return 0;
 }

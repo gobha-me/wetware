@@ -1,4 +1,4 @@
-[gd_scene load_steps=26 format=3 uid="uid://wetware_vertical_slice"]
+[gd_scene load_steps=42 format=3 uid="uid://wetware_vertical_slice"]
 
 [ext_resource type="Script" path="res://scenes/vertical_slice.gd" id="1_script"]
 [ext_resource type="Shader" path="res://shaders/isometric_25d.gdshader" id="2_shader"]
@@ -20,6 +20,18 @@
 [ext_resource type="Texture2D" path="res://assets/tiles/biofoundry_tower_rubble_albedo.png" id="18_rubble_albedo"]
 [ext_resource type="Texture2D" path="res://assets/normals/biofoundry_tower_rubble_normal.png" id="19_rubble_normal"]
 [ext_resource type="Texture2D" path="res://assets/tiles/biofoundry_tower_rubble_emissive.png" id="20_rubble_emissive"]
+[ext_resource type="Texture2D" path="res://assets/vehicles/syndicate_apc_iso8_albedo.png" id="21_apc_albedo"]
+[ext_resource type="Texture2D" path="res://assets/vehicles/syndicate_apc_iso8_normal.png" id="22_apc_normal"]
+[ext_resource type="Texture2D" path="res://assets/vehicles/syndicate_apc_iso8_emissive.png" id="23_apc_emissive"]
+[ext_resource type="Texture2D" path="res://assets/vehicles/plasma_sentry_turret_iso8_albedo.png" id="24_turret_albedo"]
+[ext_resource type="Texture2D" path="res://assets/vehicles/plasma_sentry_turret_iso8_normal.png" id="25_turret_normal"]
+[ext_resource type="Texture2D" path="res://assets/vehicles/plasma_sentry_turret_iso8_emissive.png" id="26_turret_emissive"]
+[ext_resource type="Texture2D" path="res://assets/vehicles/syndicate_spinner_iso8_albedo.png" id="27_spinner_albedo"]
+[ext_resource type="Texture2D" path="res://assets/vehicles/syndicate_spinner_iso8_normal.png" id="28_spinner_normal"]
+[ext_resource type="Texture2D" path="res://assets/vehicles/syndicate_spinner_iso8_emissive.png" id="29_spinner_emissive"]
+[ext_resource type="Texture2D" path="res://assets/vehicles/monorail_armored_car_iso8_albedo.png" id="30_monorail_albedo"]
+[ext_resource type="Texture2D" path="res://assets/vehicles/monorail_armored_car_iso8_normal.png" id="31_monorail_normal"]
+[ext_resource type="Texture2D" path="res://assets/vehicles/monorail_armored_car_iso8_emissive.png" id="32_monorail_emissive"]
 
 [sub_resource type="ShaderMaterial" id="ShaderMaterial_undergrid"]
 shader = ExtResource("2_shader")
@@ -75,6 +87,42 @@ shader_parameter/bloom_strength = 1.6
 shader_parameter/background_bloom = 0.35
 shader_parameter/stratum_cutaway_alpha = 1.0
 
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_apc"]
+shader = ExtResource("2_shader")
+shader_parameter/normal_map = ExtResource("22_apc_normal")
+shader_parameter/emissive_mask = ExtResource("23_apc_emissive")
+shader_parameter/rim_strength = 1.7
+shader_parameter/bloom_strength = 1.5
+shader_parameter/background_bloom = 0.35
+shader_parameter/stratum_cutaway_alpha = 1.0
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_turret"]
+shader = ExtResource("2_shader")
+shader_parameter/normal_map = ExtResource("25_turret_normal")
+shader_parameter/emissive_mask = ExtResource("26_turret_emissive")
+shader_parameter/rim_strength = 1.75
+shader_parameter/bloom_strength = 1.7
+shader_parameter/background_bloom = 0.35
+shader_parameter/stratum_cutaway_alpha = 1.0
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_spinner"]
+shader = ExtResource("2_shader")
+shader_parameter/normal_map = ExtResource("28_spinner_normal")
+shader_parameter/emissive_mask = ExtResource("29_spinner_emissive")
+shader_parameter/rim_strength = 1.75
+shader_parameter/bloom_strength = 1.55
+shader_parameter/background_bloom = 0.35
+shader_parameter/stratum_cutaway_alpha = 0.18
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_monorail"]
+shader = ExtResource("2_shader")
+shader_parameter/normal_map = ExtResource("31_monorail_normal")
+shader_parameter/emissive_mask = ExtResource("32_monorail_emissive")
+shader_parameter/rim_strength = 1.75
+shader_parameter/bloom_strength = 1.6
+shader_parameter/background_bloom = 0.35
+shader_parameter/stratum_cutaway_alpha = 0.18
+
 [node name="VerticalSliceSector" type="Node2D"]
 script = ExtResource("1_script")
 
@@ -103,10 +151,46 @@ position = Vector2(320, 168)
 texture = ExtResource("18_rubble_albedo")
 metadata/stratum = 1
 
+[node name="SyndicateApc" type="Sprite2D" parent="."]
+material = SubResource("ShaderMaterial_apc")
+position = Vector2(216, 208)
+scale = Vector2(0.5, 0.5)
+texture = ExtResource("21_apc_albedo")
+hframes = 8
+frame = 2
+metadata/stratum = 1
+
+[node name="PlasmaSentryTurret" type="Sprite2D" parent="."]
+material = SubResource("ShaderMaterial_turret")
+position = Vector2(408, 196)
+scale = Vector2(0.45, 0.45)
+texture = ExtResource("24_turret_albedo")
+hframes = 8
+frame = 4
+metadata/stratum = 1
+
 [node name="SpireSkybridge" type="Sprite2D" parent="."]
 material = SubResource("ShaderMaterial_spire")
 position = Vector2(320, 136)
 texture = ExtResource("12_spire_albedo")
+metadata/stratum = 2
+
+[node name="SyndicateSpinner" type="Sprite2D" parent="."]
+material = SubResource("ShaderMaterial_spinner")
+position = Vector2(432, 118)
+scale = Vector2(0.5, 0.5)
+texture = ExtResource("27_spinner_albedo")
+hframes = 8
+frame = 6
+metadata/stratum = 2
+
+[node name="MonorailArmoredCar" type="Sprite2D" parent="."]
+material = SubResource("ShaderMaterial_monorail")
+position = Vector2(204, 116)
+scale = Vector2(0.55, 0.55)
+texture = ExtResource("30_monorail_albedo")
+hframes = 8
+frame = 2
 metadata/stratum = 2
 
 [node name="OperativeKestrel1" type="Sprite2D" parent="."]
