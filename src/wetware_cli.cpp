@@ -1,27 +1,56 @@
 #include "wetware/simulation.hpp"
 
+#include <fstream>
 #include <iostream>
+#include <string_view>
 
-int main() {
-  auto sim = wetware::create_default_vertical_slice(
-      wetware::SessionMode::SinglePlayer);
-  sim.step_tick();
+int main(int argc, char** argv) {
+  std::string_view scenario = "default";
+  std::string_view out_path{};
 
-  const auto* player = sim.find_syndicate(1);
-  const auto* rival = sim.find_syndicate(2);
-  if (player == nullptr || rival == nullptr) {
-    return 1;
+  for (int i = 1; i < argc; ++i) {
+    const std::string_view arg(argv[i]);
+    if (arg == "--scenario" && i + 1 < argc) {
+      scenario = argv[++i];
+    } else if (out_path.empty()) {
+      out_path = arg;
+    }
   }
 
-  std::cout << "{\n"
-            << "  \"tick\": " << sim.current_tick() << ",\n"
-            << "  \"digest\": " << sim.state_digest() << ",\n"
-            << "  \"player_treasury\": " << player->treasury << ",\n"
-            << "  \"rival_treasury\": " << rival->treasury << ",\n"
-            << "  \"player_v3_legs_effective_cost\": "
-            << sim.effective_research_cost(1, 1) << ",\n"
-            << "  \"rival_v3_legs_effective_cost\": "
-            << sim.effective_research_cost(2, 1) << "\n"
-            << "}\n";
+  const auto mode = (scenario == "overclock_mp")
+                        ? wetware::SessionMode::MultiplayerMegacityWar
+                        : wetware::SessionMode::SinglePlayer;
+  auto sim = wetware::create_default_vertical_slice(mode);
+
+  if (scenario == "collapse") {
+    sim.apply_command(wetware::CommandTriggerOverclock{
+        .syndicate_id = 1,
+        .active = true,
+    });
+    sim.apply_command(wetware::CommandShearColumns{
+        .building_id = 10,
+        .stratum = wetware::Stratum::Street,
+        .columns_destroyed = 4,
+    });
+  } else if (scenario == "overclock_mp") {
+    sim.apply_command(wetware::CommandTriggerOverclock{
+        .syndicate_id = 1,
+        .active = true,
+    });
+  }
+
+  sim.step_tick();
+  const std::string payload = sim.export_snapshot_json();
+
+  if (!out_path.empty()) {
+    std::ofstream file{std::string(out_path), std::ios::binary};
+    if (!file) {
+      return 1;
+    }
+    file << payload;
+    return file.good() ? 0 : 1;
+  }
+
+  std::cout << payload;
   return 0;
 }

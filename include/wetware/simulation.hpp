@@ -30,6 +30,59 @@ enum class Stratum : std::uint8_t {
   Spire = 2,
 };
 
+struct GridCoord {
+  std::int32_t x{0};
+  std::int32_t y{0};
+  Stratum stratum{Stratum::Street};
+
+  [[nodiscard]] constexpr bool operator==(
+      const GridCoord& other) const noexcept = default;
+};
+
+enum class TileKind : std::uint8_t {
+  Void = 0,
+  UnderGridCatwalk = 1,
+  StreetAsphalt = 2,
+  SpireSkybridge = 3,
+  CoverPillar = 4,
+  OpaqueWall = 5,
+  VerticalShaft = 6,
+  RubbleCrater = 7,
+};
+
+struct SectorCell {
+  TileKind kind{TileKind::StreetAsphalt};
+  BuildingId building_id{0};
+  bool breached{false};
+};
+
+class SectorGrid {
+ public:
+  SectorGrid(std::int32_t width = 16, std::int32_t height = 16);
+
+  [[nodiscard]] std::int32_t width() const noexcept { return width_; }
+  [[nodiscard]] std::int32_t height() const noexcept { return height_; }
+  [[nodiscard]] bool in_bounds(GridCoord coord) const noexcept;
+
+  [[nodiscard]] const SectorCell& cell(GridCoord coord) const;
+  void set_cell(GridCoord coord, SectorCell value);
+
+  [[nodiscard]] bool is_walkable(GridCoord coord) const noexcept;
+  [[nodiscard]] bool can_traverse_vertical(
+      GridCoord from, Stratum target_stratum) const noexcept;
+
+  [[nodiscard]] bool has_sightline(GridCoord origin, GridCoord target,
+                                   double perception_slider,
+                                   std::uint8_t eyes_tier) const noexcept;
+
+ private:
+  [[nodiscard]] std::size_t index(GridCoord coord) const noexcept;
+
+  std::int32_t width_{16};
+  std::int32_t height_{16};
+  std::vector<SectorCell> cells_;
+};
+
 enum class CityOrgan : std::uint8_t {
   None = 0,
   PowerSubGrid = 1,
@@ -117,7 +170,9 @@ struct OperativeState {
   OperativeId id{0};
   std::string callsign;
   Stratum current_stratum{Stratum::Street};
+  GridCoord grid_pos{0, 0, Stratum::Street};
   BuildingId occupied_building{0};
+  std::int32_t health{100};
   std::array<CyberTier, 6> organs{
       CyberTier::V1, CyberTier::V1, CyberTier::V1,
       CyberTier::V1, CyberTier::V1, CyberTier::V1,
@@ -186,6 +241,14 @@ struct PersuadedThrall {
   ThrallDirective directive{ThrallDirective::Escort};
 };
 
+struct CorpseHardwareDrop {
+  OperativeId fallen_operative_id{0};
+  SyndicateId original_syndicate_id{0};
+  GridCoord coord{};
+  std::vector<BlueprintId> blueprint_ids;
+  bool extracted{false};
+};
+
 struct DistrictState {
   DistrictId id{0};
   std::string name;
@@ -197,6 +260,8 @@ struct DistrictState {
   std::uint32_t security_budget{100};
   std::vector<DistrictId> adjacent_districts;
   std::vector<BuildingId> buildings;
+  SectorGrid tactical_grid{16, 16};
+  std::vector<CorpseHardwareDrop> corpse_drops;
 };
 
 struct SyndicateLedger {
@@ -260,11 +325,37 @@ struct CommandUseSalvage {
   std::size_t operative_index{0};
 };
 
-using SimulationCommand =
-    std::variant<CommandSetBiochem, CommandTriggerOverclock,
-                 CommandShearColumns, CommandFundRebuild,
-                 CommandAllocateResearch, CommandSalvageFieldHardware,
-                 CommandUseSalvage>;
+struct CommandTraverseVerticalShaft {
+  SyndicateId syndicate_id{0};
+  std::size_t operative_index{0};
+  DistrictId district_id{0};
+  Stratum target_stratum{Stratum::Street};
+};
+
+struct CommandBreachFloorSlab {
+  DistrictId district_id{0};
+  GridCoord coord{};
+};
+
+struct CommandFireOrdinance {
+  SyndicateId attacker_syndicate_id{0};
+  std::size_t operative_index{0};
+  DistrictId district_id{0};
+  WeaponId weapon{WeaponId::SuppressedGauss};
+  GridCoord target_coord{};
+};
+
+struct CommandExtractCorpseSalvage {
+  SyndicateId syndicate_id{0};
+  std::size_t operative_index{0};
+  DistrictId district_id{0};
+};
+
+using SimulationCommand = std::variant<
+    CommandSetBiochem, CommandTriggerOverclock, CommandShearColumns,
+    CommandFundRebuild, CommandAllocateResearch, CommandSalvageFieldHardware,
+    CommandUseSalvage, CommandTraverseVerticalShaft, CommandBreachFloorSlab,
+    CommandFireOrdinance, CommandExtractCorpseSalvage>;
 
 class MegacitySimulation {
  public:
@@ -292,6 +383,7 @@ class MegacitySimulation {
   [[nodiscard]] SyndicateLedger* find_syndicate_mut(SyndicateId id) noexcept;
   [[nodiscard]] const DistrictState* find_district(
       DistrictId id) const noexcept;
+  [[nodiscard]] DistrictState* find_district_mut(DistrictId id) noexcept;
   [[nodiscard]] const BuildingStructure* find_building(
       BuildingId id) const noexcept;
 
@@ -312,6 +404,7 @@ class MegacitySimulation {
 
   bool apply_command(const SimulationCommand& cmd);
   void step_tick();
+  std::optional<RaidOutcome> step_rival_ai(SyndicateId rival_id);
 
   bool trigger_power_reroute_blackout(SyndicateId syndicate_id,
                                       DistrictId target_district_id);
@@ -332,6 +425,7 @@ class MegacitySimulation {
       std::optional<SyndicateId> live_interceptor = std::nullopt);
 
   [[nodiscard]] std::uint64_t state_digest() const noexcept;
+  [[nodiscard]] std::string export_snapshot_json() const;
   [[nodiscard]] const std::vector<SimulationCommand>& command_log()
       const noexcept {
     return command_log_;

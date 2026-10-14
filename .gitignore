@@ -5,3 +5,6 @@
 *.so
 *.dylib
 compile_commands.json
+
+__pycache__/
+*.pyc
