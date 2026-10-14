@@ -191,6 +191,17 @@
         "rooftop_hvac_cooling_tower_iso8_emissive.png"
       ],
       "dimensions": "1024x128 (8 frames @ 128x128 orthographic 2:1 isometric)"
+    },
+    {
+      "id": "data_vault_mainframe_rack",
+      "preview_task_id": "01a13bc4-4615-71b9-bca2-c44d0bcc2b68",
+      "refine_task_id": "01a13bc5-4425-75ba-aae9-80c80555470d",
+      "outputs": [
+        "data_vault_mainframe_rack_iso8_albedo.png",
+        "data_vault_mainframe_rack_iso8_normal.png",
+        "data_vault_mainframe_rack_iso8_emissive.png"
+      ],
+      "dimensions": "1024x128 (8 frames @ 128x128 orthographic 2:1 isometric)"
     }
   ],
   "rejected_candidates": [

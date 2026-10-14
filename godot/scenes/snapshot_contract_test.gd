@@ -54,7 +54,7 @@ func _initialize() -> void:
 		quit(1)
 		return
 
-	for vehicle_node_name in ["SyndicateApc", "PlasmaSentryTurret", "SyndicateSpinner", "MonorailArmoredCar", "HighVoltageTransformerBank", "CryoStasisVat", "ExecutiveArmoredLimo", "CorpSecurityInterceptor", "CyberClinicMedPod", "QuadHunterKillerDrone"]:
+	for vehicle_node_name in ["SyndicateApc", "PlasmaSentryTurret", "SyndicateSpinner", "MonorailArmoredCar", "HighVoltageTransformerBank", "CryoStasisVat", "ExecutiveArmoredLimo", "CorpSecurityInterceptor", "CyberClinicMedPod", "QuadHunterKillerDrone", "DataVaultMainframeRack"]:
 		var vnode := sector.get_node_or_null(vehicle_node_name) as Sprite2D
 		if vnode == null or vnode.hframes != 8 or vnode.texture == null:
 			push_error("Missing or misconfigured 8-directional isometric vehicle/turret node: %s" % vehicle_node_name)

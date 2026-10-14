@@ -1,4 +1,4 @@
-[gd_scene load_steps=66 format=3 uid="uid://wetware_vertical_slice"]
+[gd_scene load_steps=70 format=3 uid="uid://wetware_vertical_slice"]
 
 [ext_resource type="Script" path="res://scenes/vertical_slice.gd" id="1_script"]
 [ext_resource type="Shader" path="res://shaders/isometric_25d.gdshader" id="2_shader"]
@@ -50,6 +50,9 @@
 [ext_resource type="Texture2D" path="res://assets/vehicles/quad_hunter_killer_drone_iso8_albedo.png" id="48_drone_albedo"]
 [ext_resource type="Texture2D" path="res://assets/vehicles/quad_hunter_killer_drone_iso8_normal.png" id="49_drone_normal"]
 [ext_resource type="Texture2D" path="res://assets/vehicles/quad_hunter_killer_drone_iso8_emissive.png" id="50_drone_emissive"]
+[ext_resource type="Texture2D" path="res://assets/vehicles/data_vault_mainframe_rack_iso8_albedo.png" id="51_mainframe_albedo"]
+[ext_resource type="Texture2D" path="res://assets/vehicles/data_vault_mainframe_rack_iso8_normal.png" id="52_mainframe_normal"]
+[ext_resource type="Texture2D" path="res://assets/vehicles/data_vault_mainframe_rack_iso8_emissive.png" id="53_mainframe_emissive"]
 
 [sub_resource type="ShaderMaterial" id="ShaderMaterial_undergrid"]
 shader = ExtResource("2_shader")
@@ -195,6 +198,15 @@ shader_parameter/bloom_strength = 1.65
 shader_parameter/background_bloom = 0.35
 shader_parameter/stratum_cutaway_alpha = 0.18
 
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_mainframe"]
+shader = ExtResource("2_shader")
+shader_parameter/normal_map = ExtResource("52_mainframe_normal")
+shader_parameter/emissive_mask = ExtResource("53_mainframe_emissive")
+shader_parameter/rim_strength = 1.8
+shader_parameter/bloom_strength = 1.65
+shader_parameter/background_bloom = 0.35
+shader_parameter/stratum_cutaway_alpha = 0.18
+
 [node name="VerticalSliceSector" type="Node2D"]
 script = ExtResource("1_script")
 
@@ -317,6 +329,15 @@ scale = Vector2(0.42, 0.42)
 texture = ExtResource("48_drone_albedo")
 hframes = 8
 frame = 3
+metadata/stratum = 2
+
+[node name="DataVaultMainframeRack" type="Sprite2D" parent="."]
+material = SubResource("ShaderMaterial_mainframe")
+position = Vector2(276, 112)
+scale = Vector2(0.42, 0.42)
+texture = ExtResource("51_mainframe_albedo")
+hframes = 8
+frame = 0
 metadata/stratum = 2
 
 [node name="OperativeKestrel1" type="Sprite2D" parent="."]
