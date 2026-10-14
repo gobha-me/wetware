@@ -333,6 +333,28 @@ void test_thrall_directives_and_monorail_wreck_loot() {
           "Monorail wreck marked looted");
 }
 
+void test_subgrid_transformer_sabotage_and_executive_convoy_ambush() {
+  auto sim = wetware::create_default_vertical_slice();
+
+  // Operative 3 (CHROME-4) is on UnderGrid; sabotage transformer in District 2
+  require(sim.apply_command(wetware::CommandSabotageTransformer{
+              .syndicate_id = 1, .operative_index = 3, .district_id = 2}),
+          "Operative CHROME-4 sabotages Under-Grid transformer in District 2");
+  require(!sim.find_district(2)->transformer_intact &&
+              sim.find_district(2)->power_blackout &&
+              sim.find_district(2)->security_budget == 70,
+          "Transformer sabotage triggers District 2 blackout and -30 security");
+
+  // Operative 1 (VEX-2) is on Street; intercept Executive Convoy in District 2
+  const wetware::Credits before_convoy = sim.find_syndicate(1)->treasury;
+  require(sim.apply_command(wetware::CommandInterceptExecutiveConvoy{
+              .syndicate_id = 1, .operative_index = 1, .district_id = 2}),
+          "Operative VEX-2 intercepts Zaibatsu Executive Convoy on Street");
+  require(!sim.find_district(2)->executive_convoy_active &&
+              sim.find_syndicate(1)->treasury == before_convoy + 1500,
+          "Executive Convoy ambush awards +1500 bearer bonds and salvage");
+}
+
 } // namespace
 
 int main() {
@@ -344,6 +366,7 @@ int main() {
   test_deterministic_command_replay();
   test_ordinance_strike_and_corpse_wetware_extraction();
   test_thrall_directives_and_monorail_wreck_loot();
+  test_subgrid_transformer_sabotage_and_executive_convoy_ambush();
   std::cout << "All wetware C++23 simulation tests passed.\n";
   return 0;
 }
