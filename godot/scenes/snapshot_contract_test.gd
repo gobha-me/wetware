@@ -47,6 +47,20 @@ func _initialize() -> void:
 		quit(1)
 		return
 
+	var default_dict := default_data as Dictionary
+	var dist0: Dictionary = default_dict["districts"][0]
+	if not dist0.has("crowd_surge_active") or not dist0.has("monorail_wreck_lootable") or not dist0.has("corpse_drops_count"):
+		push_error("Snapshot district telemetry missing M3 fields")
+		quit(1)
+		return
+
+	for vehicle_node_name in ["SyndicateApc", "PlasmaSentryTurret", "SyndicateSpinner", "MonorailArmoredCar"]:
+		var vnode := sector.get_node_or_null(vehicle_node_name) as Sprite2D
+		if vnode == null or vnode.hframes != 8 or vnode.texture == null:
+			push_error("Missing or misconfigured 8-directional isometric vehicle/turret node: %s" % vehicle_node_name)
+			quit(1)
+			return
+
 	# Reject malformed / adversarial snapshots
 	var bad_cases: Array = [
 		null,

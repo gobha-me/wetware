@@ -808,6 +808,74 @@ bool MegacitySimulation::apply_command(const SimulationCommand& cmd) {
     return any_extracted;
   }
 
+  if (const auto* thrall_cmd =
+          std::get_if<CommandTriggerThrallDirective>(&cmd)) {
+    auto* syn = find_syndicate_mut(thrall_cmd->syndicate_id);
+    if (syn == nullptr) return false;
+
+    auto it = std::ranges::find_if(syn->thralls, [&](const PersuadedThrall& t) {
+      return t.actor_id == thrall_cmd->actor_id;
+    });
+    if (it == syn->thralls.end()) return false;
+
+    auto* dist = find_district_mut(it->district_id);
+    if (dist == nullptr) return false;
+
+    switch (it->directive) {
+      case ThrallDirective::SleeperNode:
+        dist->sleeper_vision_syndicate = syn->id;
+        return true;
+      case ThrallDirective::DeadManBroadcast:
+        dist->security_budget =
+            (dist->security_budget > 40U) ? (dist->security_budget - 40U) : 0U;
+        for (auto& bld : buildings_) {
+          if (bld.id == thrall_cmd->target_building_id) {
+            for (auto& story : bld.stories) {
+              if (story.stratum == Stratum::Street) {
+                story.intact_columns = (story.intact_columns > 2U)
+                                           ? (story.intact_columns - 2U)
+                                           : 0U;
+              }
+            }
+            propagate_structural_collapse(bld);
+            break;
+          }
+        }
+        syn->thralls.erase(it);
+        return true;
+      case ThrallDirective::CrowdSurge:
+        dist->crowd_surge_active = true;
+        return true;
+      case ThrallDirective::Escort: return true;
+    }
+    return false;
+  }
+
+  if (const auto* loot_wreck = std::get_if<CommandLootMonorailWreck>(&cmd)) {
+    auto* syn = find_syndicate_mut(loot_wreck->syndicate_id);
+    auto* dist = find_district_mut(loot_wreck->district_id);
+    if (syn == nullptr || dist == nullptr ||
+        loot_wreck->operative_index >= syn->squad.size()) {
+      return false;
+    }
+    const auto& op = syn->squad.at(loot_wreck->operative_index);
+    if (!op.alive || op.current_stratum != Stratum::Street ||
+        !dist->monorail_wreck_lootable) {
+      return false;
+    }
+    syn->treasury += dist->monorail_vault_loot;
+    dist->monorail_vault_loot = 0;
+    dist->monorail_wreck_lootable = false;
+    if (!blueprints_.empty()) {
+      apply_command(CommandSalvageFieldHardware{
+          .syndicate_id = syn->id,
+          .blueprint_id = blueprints_.back().id,
+          .quantity = 1,
+      });
+    }
+    return true;
+  }
+
   return false;
 }
 
@@ -1095,6 +1163,9 @@ RaidOutcome MegacitySimulation::resolve_district_raid(
   if (target_district->power_blackout) {
     defense_power *= 0.70;
   }
+  if (target_district->crowd_surge_active) {
+    defense_power *= 0.50;
+  }
 
   outcome.attacker_won = (attack_power >= defense_power);
   if (!outcome.attacker_won) {
@@ -1161,6 +1232,9 @@ std::uint64_t MegacitySimulation::state_digest() const noexcept {
     hash = fnv1a_mix(hash, dist.id);
     hash = fnv1a_mix(hash, dist.owner_syndicate);
     hash = fnv1a_mix(hash, dist.power_blackout ? 1ULL : 0ULL);
+    hash = fnv1a_mix(hash, dist.crowd_surge_active ? 1ULL : 0ULL);
+    hash = fnv1a_mix(hash, dist.sleeper_vision_syndicate);
+    hash = fnv1a_mix(hash, dist.monorail_wreck_lootable ? 1ULL : 0ULL);
   }
 
   for (const auto& bld : buildings_) {
@@ -1194,6 +1268,8 @@ std::string MegacitySimulation::export_snapshot_json() const {
     out += "      \"id\": " + std::to_string(syn.id) + ",\n";
     out += "      \"name\": \"" + syn.name + "\",\n";
     out += "      \"treasury\": " + std::to_string(syn.treasury) + ",\n";
+    out += "      \"thralls_count\": " + std::to_string(syn.thralls.size()) +
+           ",\n";
     out += "      \"squad\": [\n";
     for (std::size_t oi = 0; oi < syn.squad.size(); ++oi) {
       const auto& op = syn.squad.at(oi);
@@ -1233,7 +1309,15 @@ std::string MegacitySimulation::export_snapshot_json() const {
     out += "      \"organ\": " +
            std::to_string(static_cast<unsigned>(dist.organ)) + ",\n";
     out += "      \"power_blackout\": " +
-           std::string(dist.power_blackout ? "true" : "false") + "\n";
+           std::string(dist.power_blackout ? "true" : "false") + ",\n";
+    out += "      \"crowd_surge_active\": " +
+           std::string(dist.crowd_surge_active ? "true" : "false") + ",\n";
+    out += "      \"sleeper_vision_syndicate\": " +
+           std::to_string(dist.sleeper_vision_syndicate) + ",\n";
+    out += "      \"monorail_wreck_lootable\": " +
+           std::string(dist.monorail_wreck_lootable ? "true" : "false") + ",\n";
+    out += "      \"corpse_drops_count\": " +
+           std::to_string(dist.corpse_drops.size()) + "\n";
     out += (di + 1 < districts_.size()) ? "    },\n" : "    }\n";
   }
   out += "  ],\n";
@@ -1357,6 +1441,8 @@ MegacitySimulation create_default_vertical_slice(SessionMode mode) {
       .organ = CityOrgan::BioFoundry,
       .power_blackout = false,
       .monorail_wreck_lootable = false,
+      .crowd_surge_active = false,
+      .sleeper_vision_syndicate = 0,
       .monorail_vault_loot = 0,
       .security_budget = 120,
       .adjacent_districts = {2, 3},
@@ -1389,6 +1475,8 @@ MegacitySimulation create_default_vertical_slice(SessionMode mode) {
       .organ = CityOrgan::BroadcastSpire,
       .power_blackout = false,
       .monorail_wreck_lootable = false,
+      .crowd_surge_active = false,
+      .sleeper_vision_syndicate = 0,
       .monorail_vault_loot = 0,
       .security_budget = 100,
       .adjacent_districts = {1, 3},
@@ -1404,6 +1492,8 @@ MegacitySimulation create_default_vertical_slice(SessionMode mode) {
       .organ = CityOrgan::MonorailHub,
       .power_blackout = false,
       .monorail_wreck_lootable = false,
+      .crowd_surge_active = false,
+      .sleeper_vision_syndicate = 0,
       .monorail_vault_loot = 0,
       .security_budget = 90,
       .adjacent_districts = {1, 2},

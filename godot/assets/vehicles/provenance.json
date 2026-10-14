@@ -1,0 +1,53 @@
+{
+  "schema_version": "1.0",
+  "project": "wetware",
+  "pipeline": "meshy-6-refine-to-blender-iso8-turntable",
+  "license": "Proprietary / First-Party Generated (Meshy Pro Subscription)",
+  "generated_at": "2026-10-14T18:05:00Z",
+  "assets": [
+    {
+      "id": "syndicate_spinner",
+      "preview_task_id": "01a13b90-2a51-7213-b91d-bd2fb37737af",
+      "refine_task_id": "01a13b92-412d-77ae-b0b5-bf32551a8a86",
+      "outputs": [
+        "syndicate_spinner_iso8_albedo.png",
+        "syndicate_spinner_iso8_normal.png",
+        "syndicate_spinner_iso8_emissive.png"
+      ],
+      "dimensions": "1024x128 (8 frames @ 128x128 orthographic 2:1 isometric)"
+    },
+    {
+      "id": "syndicate_apc",
+      "preview_task_id": "01a13b90-35de-74f0-b515-139584733270",
+      "refine_task_id": "01a13b92-4731-725b-b827-a0c110f1c606",
+      "outputs": [
+        "syndicate_apc_iso8_albedo.png",
+        "syndicate_apc_iso8_normal.png",
+        "syndicate_apc_iso8_emissive.png"
+      ],
+      "dimensions": "1024x128 (8 frames @ 128x128 orthographic 2:1 isometric)"
+    },
+    {
+      "id": "plasma_sentry_turret",
+      "preview_task_id": "01a13b90-4045-71aa-9a46-30e8ed523651",
+      "refine_task_id": "01a13b92-4d6a-714b-82ee-b7c7c5722e3f",
+      "outputs": [
+        "plasma_sentry_turret_iso8_albedo.png",
+        "plasma_sentry_turret_iso8_normal.png",
+        "plasma_sentry_turret_iso8_emissive.png"
+      ],
+      "dimensions": "1024x128 (8 frames @ 128x128 orthographic 2:1 isometric)"
+    },
+    {
+      "id": "monorail_armored_car",
+      "preview_task_id": "01a13b90-4b07-72dc-a6ec-3d763d33d2a2",
+      "refine_task_id": "01a13b92-5317-72c1-9671-9c09c92b649d",
+      "outputs": [
+        "monorail_armored_car_iso8_albedo.png",
+        "monorail_armored_car_iso8_normal.png",
+        "monorail_armored_car_iso8_emissive.png"
+      ],
+      "dimensions": "1024x128 (8 frames @ 128x128 orthographic 2:1 isometric)"
+    }
+  ]
+}
