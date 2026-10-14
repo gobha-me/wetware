@@ -1017,6 +1017,91 @@ std::uint64_t MegacitySimulation::state_digest() const noexcept {
   return hash;
 }
 
+std::string MegacitySimulation::export_snapshot_json() const {
+  std::string out;
+  out.reserve(4096);
+  out += "{\n";
+  out += "  \"schema_version\": 1,\n";
+  out += "  \"tick\": " + std::to_string(tick_) + ",\n";
+  out += "  \"session_mode\": " + std::to_string(static_cast<unsigned>(mode_)) +
+         ",\n";
+  out += "  \"tactical_time_scale\": " + std::to_string(tactical_time_scale_) +
+         ",\n";
+  out +=
+      "  \"macro_city_time_scale\": " + std::to_string(macro_city_time_scale_) +
+      ",\n";
+  out += "  \"state_digest\": \"" + std::to_string(state_digest()) + "\",\n";
+
+  out += "  \"syndicates\": [\n";
+  for (std::size_t si = 0; si < syndicates_.size(); ++si) {
+    const auto& syn = syndicates_.at(si);
+    out += "    {\n";
+    out += "      \"id\": " + std::to_string(syn.id) + ",\n";
+    out += "      \"name\": \"" + syn.name + "\",\n";
+    out += "      \"treasury\": " + std::to_string(syn.treasury) + ",\n";
+    out += "      \"squad\": [\n";
+    for (std::size_t oi = 0; oi < syn.squad.size(); ++oi) {
+      const auto& op = syn.squad.at(oi);
+      out += "        {\n";
+      out += "          \"id\": " + std::to_string(op.id) + ",\n";
+      out += "          \"callsign\": \"" + op.callsign + "\",\n";
+      out += "          \"stratum\": " +
+             std::to_string(static_cast<unsigned>(op.current_stratum)) + ",\n";
+      out += "          \"grid_x\": " + std::to_string(op.grid_pos.x) + ",\n";
+      out += "          \"grid_y\": " + std::to_string(op.grid_pos.y) + ",\n";
+      out += "          \"occupied_building\": " +
+             std::to_string(op.occupied_building) + ",\n";
+      out += "          \"health\": " + std::to_string(op.health) + ",\n";
+      out +=
+          "          \"alive\": " + std::string(op.alive ? "true" : "false") +
+          ",\n";
+      out += "          \"overclock\": " +
+             std::to_string(static_cast<unsigned>(op.overclock)) + ",\n";
+      out += "          \"medical_status\": " +
+             std::to_string(static_cast<unsigned>(op.medical_status)) + "\n";
+      out += (oi + 1 < syn.squad.size()) ? "        },\n" : "        }\n";
+    }
+    out += "      ]\n";
+    out += (si + 1 < syndicates_.size()) ? "    },\n" : "    }\n";
+  }
+  out += "  ],\n";
+
+  out += "  \"districts\": [\n";
+  for (std::size_t di = 0; di < districts_.size(); ++di) {
+    const auto& dist = districts_.at(di);
+    out += "    {\n";
+    out += "      \"id\": " + std::to_string(dist.id) + ",\n";
+    out += "      \"name\": \"" + dist.name + "\",\n";
+    out +=
+        "      \"owner_syndicate\": " + std::to_string(dist.owner_syndicate) +
+        ",\n";
+    out += "      \"organ\": " +
+           std::to_string(static_cast<unsigned>(dist.organ)) + ",\n";
+    out += "      \"power_blackout\": " +
+           std::string(dist.power_blackout ? "true" : "false") + "\n";
+    out += (di + 1 < districts_.size()) ? "    },\n" : "    }\n";
+  }
+  out += "  ],\n";
+
+  out += "  \"buildings\": [\n";
+  for (std::size_t bi = 0; bi < buildings_.size(); ++bi) {
+    const auto& bld = buildings_.at(bi);
+    out += "    {\n";
+    out += "      \"id\": " + std::to_string(bld.id) + ",\n";
+    out += "      \"name\": \"" + bld.name + "\",\n";
+    out += "      \"district_id\": " + std::to_string(bld.district_id) + ",\n";
+    out +=
+        "      \"state\": " + std::to_string(static_cast<unsigned>(bld.state)) +
+        ",\n";
+    out += "      \"rebuild_ticks_remaining\": " +
+           std::to_string(bld.rebuild_ticks_remaining) + "\n";
+    out += (bi + 1 < buildings_.size()) ? "    },\n" : "    }\n";
+  }
+  out += "  ]\n";
+  out += "}\n";
+  return out;
+}
+
 MegacitySimulation create_default_vertical_slice(SessionMode mode) {
   MegacitySimulation sim(mode, 0x57455457415245ULL);
 

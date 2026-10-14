@@ -401,6 +401,7 @@ class MegacitySimulation {
       std::optional<SyndicateId> live_interceptor = std::nullopt);
 
   [[nodiscard]] std::uint64_t state_digest() const noexcept;
+  [[nodiscard]] std::string export_snapshot_json() const;
   [[nodiscard]] const std::vector<SimulationCommand>& command_log()
       const noexcept {
     return command_log_;

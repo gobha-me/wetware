@@ -213,6 +213,11 @@ void test_deterministic_command_replay() {
 
   require(sim_a.state_digest() == sim_b.state_digest(),
           "Deterministic command replay yields identical state digest");
+  const std::string json_a = sim_a.export_snapshot_json();
+  const std::string json_b = sim_b.export_snapshot_json();
+  require(json_a == json_b &&
+              json_a.find("\"schema_version\": 1") != std::string::npos,
+          "Deterministic snapshot JSON export matches across replays");
 }
 
 } // namespace
