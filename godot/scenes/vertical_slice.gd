@@ -13,13 +13,21 @@ const OPERATIVE_NODES := [
 	"OperativeChrome4",
 ]
 
+const STRATUM_NAMES := {
+	0: "UNDER-GRID",
+	1: "STREET",
+	2: "SPIRE",
+}
+
 var active_stratum: Stratum = Stratum.STREET
 var overclock_active: bool = false
 var tower_collapsed: bool = false
+var syndicate_treasury: int = 6000
 var last_digest: String = ""
 
 func _ready() -> void:
 	_apply_stratum_cutaway(active_stratum)
+	_refresh_hud()
 	if DisplayServer.get_name() == "headless":
 		_apply_stratum_cutaway(Stratum.UNDER_GRID)
 		_apply_stratum_cutaway(Stratum.SPIRE)
@@ -42,6 +50,7 @@ func _unhandled_input(event: InputEvent) -> void:
 			KEY_SPACE:
 				overclock_active = not overclock_active
 				Engine.time_scale = 0.25 if overclock_active else 1.0
+				_refresh_hud()
 
 func valid_snapshot(data: Variant) -> bool:
 	if typeof(data) != TYPE_DICTIONARY:
@@ -93,10 +102,10 @@ func apply_snapshot(data: Dictionary) -> bool:
 	for bld_var in data["buildings"] as Array:
 		var bld: Dictionary = bld_var
 		if int(bld["id"]) == 10:
-			# BuildingState::Rubble == 2
 			set_tower_collapsed(int(bld["state"]) == 2)
 
 	var player_syn: Dictionary = (data["syndicates"] as Array)[0]
+	syndicate_treasury = int(player_syn.get("treasury", 0))
 	var squad: Array = player_syn["squad"]
 	for i in range(min(squad.size(), OPERATIVE_NODES.size())):
 		var op: Dictionary = squad[i]
@@ -107,6 +116,7 @@ func apply_snapshot(data: Dictionary) -> bool:
 			node.visible = bool(op["alive"])
 
 	_apply_stratum_cutaway(active_stratum)
+	_refresh_hud()
 	return true
 
 func set_tower_collapsed(collapsed: bool) -> void:
@@ -117,6 +127,7 @@ func set_tower_collapsed(collapsed: bool) -> void:
 		intact_node.visible = not collapsed
 	if rubble_node:
 		rubble_node.visible = collapsed
+	_refresh_hud()
 
 func _apply_stratum_cutaway(focus_stratum: Stratum) -> void:
 	active_stratum = focus_stratum
@@ -132,3 +143,18 @@ func _apply_stratum_cutaway(focus_stratum: Stratum) -> void:
 		if child is CanvasItem and child.material is ShaderMaterial:
 			var smat := child.material as ShaderMaterial
 			smat.set_shader_parameter("stratum_cutaway_alpha", alpha)
+	_refresh_hud()
+
+func _refresh_hud() -> void:
+	var hud_label := get_node_or_null("TacticalHud/HudTelemetryLabel") as Label
+	if hud_label == null:
+		return
+	var stratum_name: String = STRATUM_NAMES.get(int(active_stratum), "STREET")
+	var organ_state := "RUBBLE" if tower_collapsed else "INTACT"
+	var oc_state := "OVERCLOCK 0.25x" if overclock_active else "NOMINAL 1.00x"
+	hud_label.text = "CR: %d | STRATUM: %s | BIO-FOUNDRY: %s | %s" % [
+		syndicate_treasury,
+		stratum_name,
+		organ_state,
+		oc_state,
+	]

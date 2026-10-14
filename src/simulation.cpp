@@ -653,6 +653,161 @@ bool MegacitySimulation::apply_command(const SimulationCommand& cmd) {
     return true;
   }
 
+  if (const auto* fire = std::get_if<CommandFireOrdinance>(&cmd)) {
+    const auto* attacker = find_syndicate(fire->attacker_syndicate_id);
+    auto* dist = find_district_mut(fire->district_id);
+    if (attacker == nullptr || dist == nullptr ||
+        fire->operative_index >= attacker->squad.size()) {
+      return false;
+    }
+    const auto& shooter = attacker->squad.at(fire->operative_index);
+    if (!shooter.alive || !dist->tactical_grid.in_bounds(fire->target_coord)) {
+      return false;
+    }
+
+    auto spawn_corpse_drop = [&](SyndicateId owner_id,
+                                 const OperativeState& dead_op) {
+      std::vector<BlueprintId> drops;
+      for (const auto& bp : blueprints_) {
+        if (bp.category == BlueprintCategory::CyberneticOrgan &&
+            dead_op.organ_tier(bp.organ_slot) == bp.cyber_tier &&
+            bp.cyber_tier != CyberTier::V1) {
+          drops.push_back(bp.id);
+        } else if (bp.category == BlueprintCategory::HeavyOrdinance &&
+                   dead_op.primary_weapon == bp.weapon_id) {
+          drops.push_back(bp.id);
+        }
+      }
+      if (drops.empty() && !blueprints_.empty()) {
+        drops.push_back(blueprints_.front().id);
+      }
+      dist->corpse_drops.push_back(CorpseHardwareDrop{
+          .fallen_operative_id = dead_op.id,
+          .original_syndicate_id = owner_id,
+          .coord = dead_op.grid_pos,
+          .blueprint_ids = std::move(drops),
+          .extracted = false,
+      });
+    };
+
+    if (fire->weapon == WeaponId::SatelliteRain) {
+      // Orbital kinetic strike punches vertically from Spire -> Street ->
+      // UnderGrid at (target.x, target.y)
+      for (const Stratum s :
+           {Stratum::Spire, Stratum::Street, Stratum::UnderGrid}) {
+        const GridCoord c{fire->target_coord.x, fire->target_coord.y, s};
+        SectorCell cell = dist->tactical_grid.cell(c);
+        if (cell.building_id != 0) {
+          for (auto& bld : buildings_) {
+            if (bld.id == cell.building_id) {
+              for (auto& story : bld.stories) {
+                story.intact_columns = 0;
+              }
+              propagate_structural_collapse(bld);
+            }
+          }
+        }
+        cell.kind =
+            (s == Stratum::Spire) ? TileKind::Void : TileKind::RubbleCrater;
+        cell.breached = (s != Stratum::UnderGrid);
+        dist->tactical_grid.set_cell(c, cell);
+      }
+      for (auto& syn : syndicates_) {
+        for (auto& op : syn.squad) {
+          if (op.alive && op.grid_pos.x == fire->target_coord.x &&
+              op.grid_pos.y == fire->target_coord.y) {
+            op.health = 0;
+            op.alive = false;
+            spawn_corpse_drop(syn.id, op);
+          }
+        }
+      }
+      return true;
+    }
+
+    // Gauss / Plasma / Minigun ballistic shot at target_coord
+    const SectorCell target_cell = dist->tactical_grid.cell(fire->target_coord);
+    if (target_cell.kind == TileKind::OpaqueWall ||
+        target_cell.kind == TileKind::CoverPillar) {
+      SectorCell destroyed = target_cell;
+      destroyed.kind = TileKind::StreetAsphalt;
+      dist->tactical_grid.set_cell(fire->target_coord, destroyed);
+    }
+    if (target_cell.building_id != 0 &&
+        (fire->weapon == WeaponId::SuppressedGauss ||
+         fire->weapon == WeaponId::PlasmaLance ||
+         fire->weapon == WeaponId::ThermiteCharge)) {
+      for (auto& bld : buildings_) {
+        if (bld.id == target_cell.building_id) {
+          for (auto& story : bld.stories) {
+            if (story.stratum == fire->target_coord.stratum &&
+                story.intact_columns > 0) {
+              story.intact_columns -= 1;
+            }
+          }
+          propagate_structural_collapse(bld);
+        }
+      }
+    }
+
+    const int base_damage =
+        (fire->weapon == WeaponId::PlasmaLance)
+            ? 120
+            : (fire->weapon == WeaponId::SuppressedGauss ? 85 : 55);
+    for (auto& syn : syndicates_) {
+      if (syn.id == fire->attacker_syndicate_id) continue;
+      for (auto& op : syn.squad) {
+        if (op.alive && op.grid_pos == fire->target_coord) {
+          const int chest_armor =
+              static_cast<int>(op.organ_tier(OrganSlot::Chest)) * 10;
+          op.health =
+              std::max(0, op.health - std::max(10, base_damage - chest_armor));
+          if (op.health == 0) {
+            op.alive = false;
+            spawn_corpse_drop(syn.id, op);
+          }
+        }
+      }
+    }
+    return true;
+  }
+
+  if (const auto* extract = std::get_if<CommandExtractCorpseSalvage>(&cmd)) {
+    auto* syn = find_syndicate_mut(extract->syndicate_id);
+    auto* dist = find_district_mut(extract->district_id);
+    if (syn == nullptr || dist == nullptr ||
+        extract->operative_index >= syn->squad.size()) {
+      return false;
+    }
+    const auto& extractor = syn->squad.at(extract->operative_index);
+    if (!extractor.alive) return false;
+
+    bool any_extracted = false;
+    for (auto& drop : dist->corpse_drops) {
+      if (!drop.extracted && drop.coord == extractor.grid_pos) {
+        drop.extracted = true;
+        any_extracted = true;
+        for (const BlueprintId bp_id : drop.blueprint_ids) {
+          bool merged = false;
+          for (auto& unit : syn->cryo_vault_salvage) {
+            if (unit.blueprint_id == bp_id) {
+              unit.quantity += 1;
+              merged = true;
+              break;
+            }
+          }
+          if (!merged) {
+            syn->cryo_vault_salvage.push_back(SalvagedHardwareUnit{
+                .blueprint_id = bp_id,
+                .quantity = 1,
+            });
+          }
+        }
+      }
+    }
+    return any_extracted;
+  }
+
   return false;
 }
 
@@ -1207,6 +1362,7 @@ MegacitySimulation create_default_vertical_slice(SessionMode mode) {
       .adjacent_districts = {2, 3},
       .buildings = {},
       .tactical_grid = SectorGrid(16, 16),
+      .corpse_drops = {},
   };
   // Populate Kowloon Bio-Foundry 3-stratum vertical connectors and sky-bridge
   for (const Stratum s :
@@ -1237,6 +1393,8 @@ MegacitySimulation create_default_vertical_slice(SessionMode mode) {
       .security_budget = 100,
       .adjacent_districts = {1, 3},
       .buildings = {},
+      .tactical_grid = SectorGrid(16, 16),
+      .corpse_drops = {},
   });
 
   sim.add_district(DistrictState{
@@ -1250,6 +1408,8 @@ MegacitySimulation create_default_vertical_slice(SessionMode mode) {
       .security_budget = 90,
       .adjacent_districts = {1, 2},
       .buildings = {},
+      .tactical_grid = SectorGrid(16, 16),
+      .corpse_drops = {},
   });
 
   sim.add_building(BuildingStructure{

@@ -41,6 +41,12 @@ func _initialize() -> void:
 		quit(1)
 		return
 
+	var hud_label := sector.get_node("TacticalHud/HudTelemetryLabel") as Label
+	if hud_label == null or not hud_label.text.contains("BIO-FOUNDRY: RUBBLE") or not hud_label.text.contains("OVERCLOCK 0.25x"):
+		push_error("TacticalHud label did not reflect authoritative C++23 collapse/overclock state")
+		quit(1)
+		return
+
 	# Reject malformed / adversarial snapshots
 	var bad_cases: Array = [
 		null,

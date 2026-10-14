@@ -220,6 +220,52 @@ void test_deterministic_command_replay() {
           "Deterministic snapshot JSON export matches across replays");
 }
 
+void test_ordinance_strike_and_corpse_wetware_extraction() {
+  auto sim = wetware::create_default_vertical_slice();
+
+  // Equip Rival operative 0 (ONI-1 at (8, 8, Street)) with V3 Legs and move
+  // Player operative 2 (NULL-3) to (8, 8, Street) to extract the corpse after
+  // SatelliteRain / PlasmaLance strike.
+  auto* rival = sim.find_syndicate_mut(2);
+  auto* player = sim.find_syndicate_mut(1);
+  require(rival != nullptr && player != nullptr, "Syndicates exist");
+  rival->squad.at(0).set_organ_tier(wetware::OrganSlot::Legs,
+                                    wetware::CyberTier::V3);
+  player->squad.at(2).grid_pos =
+      wetware::GridCoord{8, 8, wetware::Stratum::Street};
+
+  require(
+      sim.apply_command(wetware::CommandFireOrdinance{
+          .attacker_syndicate_id = 1,
+          .operative_index = 0,
+          .district_id = 1,
+          .weapon = wetware::WeaponId::PlasmaLance,
+          .target_coord = wetware::GridCoord{8, 8, wetware::Stratum::Street}}),
+      "Fire PlasmaLance at (8, 8, Street)");
+  require(!rival->squad.at(0).alive, "Rival operative ONI-1 is slain");
+  require(sim.find_district(1)->corpse_drops.size() == 1,
+          "Corpse hardware drop spawned at (8, 8, Street)");
+
+  require(sim.apply_command(wetware::CommandExtractCorpseSalvage{
+              .syndicate_id = 1, .operative_index = 2, .district_id = 1}),
+          "Player operative NULL-3 extracts fallen rival's V3 cyberware");
+  require(!player->cryo_vault_salvage.empty() &&
+              player->cryo_vault_salvage.front().blueprint_id == 1,
+          "Extracted V3 Myomer Reflex Legs added to Player Cryo-Vault");
+
+  // Test SatelliteRain 3-stratum vertical kinetic strike at (4, 4)
+  require(
+      sim.apply_command(wetware::CommandFireOrdinance{
+          .attacker_syndicate_id = 2,
+          .operative_index = 1,
+          .district_id = 1,
+          .weapon = wetware::WeaponId::SatelliteRain,
+          .target_coord = wetware::GridCoord{4, 4, wetware::Stratum::Spire}}),
+      "Fire SatelliteRain orbital strike at (4, 4)");
+  require(sim.find_building(10)->state == wetware::BuildingState::Rubble,
+          "SatelliteRain collapses Building 10 across all strata");
+}
+
 } // namespace
 
 int main() {
@@ -229,6 +275,7 @@ int main() {
   test_sector_grid_vertical_traversal_sightline_and_breach();
   test_rival_ai_controller();
   test_deterministic_command_replay();
+  test_ordinance_strike_and_corpse_wetware_extraction();
   std::cout << "All wetware C++23 simulation tests passed.\n";
   return 0;
 }

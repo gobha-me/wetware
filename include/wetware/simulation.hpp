@@ -241,6 +241,14 @@ struct PersuadedThrall {
   ThrallDirective directive{ThrallDirective::Escort};
 };
 
+struct CorpseHardwareDrop {
+  OperativeId fallen_operative_id{0};
+  SyndicateId original_syndicate_id{0};
+  GridCoord coord{};
+  std::vector<BlueprintId> blueprint_ids;
+  bool extracted{false};
+};
+
 struct DistrictState {
   DistrictId id{0};
   std::string name;
@@ -253,6 +261,7 @@ struct DistrictState {
   std::vector<DistrictId> adjacent_districts;
   std::vector<BuildingId> buildings;
   SectorGrid tactical_grid{16, 16};
+  std::vector<CorpseHardwareDrop> corpse_drops;
 };
 
 struct SyndicateLedger {
@@ -328,10 +337,25 @@ struct CommandBreachFloorSlab {
   GridCoord coord{};
 };
 
+struct CommandFireOrdinance {
+  SyndicateId attacker_syndicate_id{0};
+  std::size_t operative_index{0};
+  DistrictId district_id{0};
+  WeaponId weapon{WeaponId::SuppressedGauss};
+  GridCoord target_coord{};
+};
+
+struct CommandExtractCorpseSalvage {
+  SyndicateId syndicate_id{0};
+  std::size_t operative_index{0};
+  DistrictId district_id{0};
+};
+
 using SimulationCommand = std::variant<
     CommandSetBiochem, CommandTriggerOverclock, CommandShearColumns,
     CommandFundRebuild, CommandAllocateResearch, CommandSalvageFieldHardware,
-    CommandUseSalvage, CommandTraverseVerticalShaft, CommandBreachFloorSlab>;
+    CommandUseSalvage, CommandTraverseVerticalShaft, CommandBreachFloorSlab,
+    CommandFireOrdinance, CommandExtractCorpseSalvage>;
 
 class MegacitySimulation {
  public:

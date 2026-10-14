@@ -132,3 +132,12 @@ material = SubResource("ShaderMaterial_undergrid")
 position = Vector2(320, 232)
 texture = ExtResource("6_op_albedo")
 metadata/stratum = 0
+
+[node name="TacticalHud" type="CanvasLayer" parent="."]
+
+[node name="HudTelemetryLabel" type="Label" parent="TacticalHud"]
+offset_left = 12.0
+offset_top = 8.0
+offset_right = 628.0
+offset_bottom = 32.0
+text = "CR: 6000 | STRATUM: STREET | BIO-FOUNDRY: INTACT | NOMINAL 1.00x"
