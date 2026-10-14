@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
-"""Generate 24/32-bit isometric pixel-art tiles, trenchcoat operative sprites,
-and 2.5D Sobel normal/emissive maps for the wetware Godot 4.7.2 vertical slice.
+"""Generate 24/32-bit isometric pixel-art tiles, building facades (intact & rubble),
+trenchcoat operative sprites, and 2.5D Sobel normal/emissive maps for the
+wetware Godot 4.7.2 Kowloon Bio-Foundry vertical slice.
 
 Also acts as the normal/emissive map bevel pipeline for assets produced via
 `venice image --no-safe-mode` / `venice bg-remove`.
@@ -18,7 +19,7 @@ def write_rgba_png(path: Path, width: int, height: int, pixels: list[tuple[int, 
     path.parent.mkdir(parents=True, exist_ok=True)
     raw = bytearray()
     for y in range(height):
-        raw.append(0)  # Filter type 0 (None)
+        raw.append(0)
         row_start = y * width
         for x in range(width):
             r, g, b, a = pixels[row_start + x]
@@ -80,7 +81,9 @@ def compute_sobel_normal_map(
     return normals
 
 
-def generate_iso_street_tile() -> tuple[int, int, list[tuple[int, int, int, int]], list[tuple[int, int, int, int]]]:
+def generate_iso_diamond_tile(
+    mode: str,
+) -> tuple[int, int, list[tuple[int, int, int, int]], list[tuple[int, int, int, int]]]:
     w, h = 64, 32
     albedo: list[tuple[int, int, int, int]] = []
     emissive: list[tuple[int, int, int, int]] = []
@@ -89,8 +92,37 @@ def generate_iso_street_tile() -> tuple[int, int, list[tuple[int, int, int, int]
         for x in range(w):
             dx = abs(x - cx) / 32.0
             dy = abs(y - cy) / 16.0
-            if dx + dy <= 1.0:
-                edge = dx + dy > 0.90
+            if dx + dy > 1.0:
+                albedo.append((0, 0, 0, 0))
+                emissive.append((0, 0, 0, 0))
+                continue
+
+            edge = dx + dy > 0.90
+            if mode == "undergrid":
+                grate = (x % 4 == 0) or (y % 4 == 0)
+                coolant = (x + y) % 11 == 0 and (dx + dy < 0.72)
+                if coolant:
+                    albedo.append((30, 185, 110, 255))
+                    emissive.append((40, 240, 130, 220))
+                elif grate:
+                    albedo.append((38, 44, 48, 255))
+                    emissive.append((0, 0, 0, 0))
+                else:
+                    albedo.append((16, 20, 24, 255))
+                    emissive.append((0, 0, 0, 0))
+            elif mode == "spire":
+                rail = dx + dy > 0.84
+                holo_strip = abs(x - 32) <= 2 and (dx + dy < 0.80)
+                if holo_strip:
+                    albedo.append((245, 70, 180, 235))
+                    emissive.append((255, 90, 200, 255))
+                elif rail:
+                    albedo.append((70, 90, 115, 255))
+                    emissive.append((0, 0, 0, 0))
+                else:
+                    albedo.append((34, 58, 82, 210))
+                    emissive.append((20, 60, 95, 90))
+            else:
                 puddle = ((x * 7 + y * 13) % 19 == 0) and (dx + dy < 0.75)
                 neon_lane = abs((x - 2 * y) - 0) <= 1 and (dx + dy < 0.8)
                 if neon_lane:
@@ -105,9 +137,51 @@ def generate_iso_street_tile() -> tuple[int, int, list[tuple[int, int, int, int]
                 else:
                     albedo.append((22, 25, 34, 255))
                     emissive.append((0, 0, 0, 0))
+    return w, h, albedo, emissive
+
+
+def generate_iso_building_facade(
+    rubble: bool,
+) -> tuple[int, int, list[tuple[int, int, int, int]], list[tuple[int, int, int, int]]]:
+    w, h = 64, 80
+    albedo: list[tuple[int, int, int, int]] = []
+    emissive: list[tuple[int, int, int, int]] = []
+    for y in range(h):
+        for x in range(w):
+            dx = abs(x - 31.5)
+            if rubble:
+                in_mound = y >= 48 and (dx / 28.0 + abs(y - 64.0) / 16.0 <= 1.05)
+                ember = in_mound and ((x * 5 + y * 9) % 23 == 0)
+                if ember:
+                    albedo.append((245, 95, 35, 255))
+                    emissive.append((255, 120, 40, 255))
+                elif in_mound:
+                    shade = 34 + ((x * 3 + y * 7) % 18)
+                    albedo.append((shade, shade - 2, shade - 4, 255))
+                    emissive.append((0, 0, 0, 0))
+                else:
+                    albedo.append((0, 0, 0, 0))
+                    emissive.append((0, 0, 0, 0))
             else:
-                albedo.append((0, 0, 0, 0))
-                emissive.append((0, 0, 0, 0))
+                in_tower = 12 <= y <= 72 and dx <= 24
+                if not in_tower:
+                    albedo.append((0, 0, 0, 0))
+                    emissive.append((0, 0, 0, 0))
+                    continue
+                is_left_face = x < 32
+                bio_vat_window = (y % 14 in (4, 5, 6, 7)) and (x % 8 in (2, 3, 4))
+                pillar = dx >= 20 or abs(x - 31.5) <= 1.5
+                if bio_vat_window:
+                    albedo.append((40, 230, 165, 255))
+                    emissive.append((55, 255, 185, 255))
+                elif pillar:
+                    base = 52 if is_left_face else 38
+                    albedo.append((base, base + 4, base + 10, 255))
+                    emissive.append((0, 0, 0, 0))
+                else:
+                    base = 34 if is_left_face else 24
+                    albedo.append((base, base + 3, base + 8, 255))
+                    emissive.append((0, 0, 0, 0))
     return w, h, albedo, emissive
 
 
@@ -118,7 +192,6 @@ def generate_iso_operative_sprite() -> tuple[int, int, list[tuple[int, int, int,
     for y in range(h):
         for x in range(w):
             dx = abs(x - 15.5)
-            # Matte-black cybernetic trenchcoat silhouette with glowing visor + Gauss barrel
             in_head = 6 <= y <= 12 and dx <= 3.5
             in_visor = 8 <= y <= 9 and 14 <= x <= 18
             in_shoulders = 13 <= y <= 20 and dx <= 6.5
@@ -143,25 +216,45 @@ def generate_iso_operative_sprite() -> tuple[int, int, list[tuple[int, int, int,
     return w, h, albedo, emissive
 
 
+def save_asset_triplet(
+    albedo_dir: Path,
+    normals_dir: Path,
+    stem: str,
+    w: int,
+    h: int,
+    albedo: list[tuple[int, int, int, int]],
+    emissive: list[tuple[int, int, int, int]],
+) -> None:
+    normal = compute_sobel_normal_map(w, h, albedo)
+    write_rgba_png(albedo_dir / f"{stem}_albedo.png", w, h, albedo)
+    write_rgba_png(albedo_dir / f"{stem}_emissive.png", w, h, emissive)
+    write_rgba_png(normals_dir / f"{stem}_normal.png", w, h, normal)
+
+
 def main() -> None:
     repo_root = Path(__file__).resolve().parent.parent
     tiles_dir = repo_root / "godot" / "assets" / "tiles"
     sprites_dir = repo_root / "godot" / "assets" / "sprites"
     normals_dir = repo_root / "godot" / "assets" / "normals"
 
-    tw, th, tile_albedo, tile_emissive = generate_iso_street_tile()
-    tile_normal = compute_sobel_normal_map(tw, th, tile_albedo)
-    write_rgba_png(tiles_dir / "street_neon_albedo.png", tw, th, tile_albedo)
-    write_rgba_png(tiles_dir / "street_neon_emissive.png", tw, th, tile_emissive)
-    write_rgba_png(normals_dir / "street_neon_normal.png", tw, th, tile_normal)
+    for mode, stem in (
+        ("undergrid", "undergrid_grate"),
+        ("street", "street_neon"),
+        ("spire", "spire_skybridge"),
+    ):
+        tw, th, albedo, emissive = generate_iso_diamond_tile(mode)
+        save_asset_triplet(tiles_dir, normals_dir, stem, tw, th, albedo, emissive)
+
+    bw, bh, b_intact_a, b_intact_e = generate_iso_building_facade(rubble=False)
+    save_asset_triplet(tiles_dir, normals_dir, "biofoundry_tower_intact", bw, bh, b_intact_a, b_intact_e)
+
+    rw, rh, b_rubble_a, b_rubble_e = generate_iso_building_facade(rubble=True)
+    save_asset_triplet(tiles_dir, normals_dir, "biofoundry_tower_rubble", rw, rh, b_rubble_a, b_rubble_e)
 
     sw, sh, op_albedo, op_emissive = generate_iso_operative_sprite()
-    op_normal = compute_sobel_normal_map(sw, sh, op_albedo)
-    write_rgba_png(sprites_dir / "operative_trenchcoat_albedo.png", sw, sh, op_albedo)
-    write_rgba_png(sprites_dir / "operative_trenchcoat_emissive.png", sw, sh, op_emissive)
-    write_rgba_png(normals_dir / "operative_trenchcoat_normal.png", sw, sh, op_normal)
+    save_asset_triplet(sprites_dir, normals_dir, "operative_trenchcoat", sw, sh, op_albedo, op_emissive)
 
-    print("Generated 24/32-bit isometric tiles, operative sprites, and 2.5D Sobel normal/emissive maps.")
+    print("Generated Kowloon Bio-Foundry 3-stratum tileset, building states, and 2.5D normal/emissive maps.")
 
 
 if __name__ == "__main__":

@@ -28,6 +28,142 @@ double clamp01(double value) noexcept {
 
 } // namespace
 
+SectorGrid::SectorGrid(std::int32_t width, std::int32_t height)
+    : width_(std::max(1, width)), height_(std::max(1, height)),
+      cells_(static_cast<std::size_t>(width_) *
+             static_cast<std::size_t>(height_) * 3U) {
+  for (std::int32_t y = 0; y < height_; ++y) {
+    for (std::int32_t x = 0; x < width_; ++x) {
+      set_cell(GridCoord{x, y, Stratum::UnderGrid},
+               SectorCell{.kind = TileKind::UnderGridCatwalk});
+      set_cell(GridCoord{x, y, Stratum::Street},
+               SectorCell{.kind = TileKind::StreetAsphalt});
+      set_cell(GridCoord{x, y, Stratum::Spire},
+               SectorCell{.kind = TileKind::Void});
+    }
+  }
+}
+
+bool SectorGrid::in_bounds(GridCoord coord) const noexcept {
+  const auto s = static_cast<std::uint8_t>(coord.stratum);
+  return coord.x >= 0 && coord.x < width_ && coord.y >= 0 &&
+         coord.y < height_ && s < 3U;
+}
+
+std::size_t SectorGrid::index(GridCoord coord) const noexcept {
+  const auto s = static_cast<std::size_t>(coord.stratum);
+  const auto ux = static_cast<std::size_t>(coord.x);
+  const auto uy = static_cast<std::size_t>(coord.y);
+  const auto uw = static_cast<std::size_t>(width_);
+  const auto uh = static_cast<std::size_t>(height_);
+  return (s * uw * uh) + (uy * uw) + ux;
+}
+
+const SectorCell& SectorGrid::cell(GridCoord coord) const {
+  return cells_.at(index(coord));
+}
+
+void SectorGrid::set_cell(GridCoord coord, SectorCell value) {
+  if (!in_bounds(coord)) return;
+  cells_.at(index(coord)) = value;
+}
+
+bool SectorGrid::is_walkable(GridCoord coord) const noexcept {
+  if (!in_bounds(coord)) return false;
+  const auto& c = cells_.at(index(coord));
+  if (c.breached) return false;
+  switch (c.kind) {
+    case TileKind::UnderGridCatwalk:
+    case TileKind::StreetAsphalt:
+    case TileKind::SpireSkybridge:
+    case TileKind::VerticalShaft:
+    case TileKind::RubbleCrater: return true;
+    case TileKind::Void:
+    case TileKind::CoverPillar:
+    case TileKind::OpaqueWall: return false;
+  }
+  return false;
+}
+
+bool SectorGrid::can_traverse_vertical(GridCoord from,
+                                       Stratum target_stratum) const noexcept {
+  if (!in_bounds(from) || from.stratum == target_stratum) return false;
+  const GridCoord dest{from.x, from.y, target_stratum};
+  if (!in_bounds(dest)) return false;
+  return cell(from).kind == TileKind::VerticalShaft &&
+         cell(dest).kind == TileKind::VerticalShaft && !cell(dest).breached;
+}
+
+bool SectorGrid::has_sightline(GridCoord origin, GridCoord target,
+                               double perception_slider,
+                               std::uint8_t eyes_tier) const noexcept {
+  if (!in_bounds(origin) || !in_bounds(target)) return false;
+
+  const double dx = static_cast<double>(target.x - origin.x);
+  const double dy = static_cast<double>(target.y - origin.y);
+  const double dz = static_cast<double>(static_cast<int>(target.stratum) -
+                                        static_cast<int>(origin.stratum)) *
+                    3.0;
+  const double dist = std::sqrt(dx * dx + dy * dy + dz * dz);
+
+  const double max_range = 6.0 + (clamp01(perception_slider) * 10.0) +
+                           (static_cast<double>(eyes_tier) * 2.5);
+  if (dist > max_range) return false;
+
+  // High perception (>= 0.75) or V3+ Cyber-Eyes grants thermal/structural
+  // silhouette detection through 1 opaque wall or 1 stratum slab.
+  const int allowed_wall_penetrations =
+      (perception_slider >= 0.75 || eyes_tier >= 3U) ? 1 : 0;
+
+  if (origin.stratum != target.stratum && allowed_wall_penetrations == 0) {
+    // Cross-stratum sightline without thermal penetration requires an open
+    // Void/breached cell or VerticalShaft along the vertical transition.
+    const auto& upper_cell =
+        (origin.stratum > target.stratum) ? cell(origin) : cell(target);
+    if (upper_cell.kind != TileKind::VerticalShaft &&
+        upper_cell.kind != TileKind::SpireSkybridge && !upper_cell.breached) {
+      return false;
+    }
+  }
+
+  std::int32_t x0 = origin.x;
+  std::int32_t y0 = origin.y;
+  const std::int32_t x1 = target.x;
+  const std::int32_t y1 = target.y;
+
+  const std::int32_t sx = (x0 < x1) ? 1 : -1;
+  const std::int32_t sy = (y0 < y1) ? 1 : -1;
+  const std::int32_t adx = std::abs(x1 - x0);
+  const std::int32_t ady = -std::abs(y1 - y0);
+  std::int32_t err = adx + ady;
+
+  int walls_hit = 0;
+  while (true) {
+    if (x0 == x1 && y0 == y1) break;
+    const GridCoord step_coord{x0, y0, origin.stratum};
+    if (!(x0 == origin.x && y0 == origin.y)) {
+      const auto kind = cell(step_coord).kind;
+      if (kind == TileKind::OpaqueWall) {
+        walls_hit += 1;
+        if (walls_hit > allowed_wall_penetrations) {
+          return false;
+        }
+      }
+    }
+    const std::int32_t e2 = 2 * err;
+    if (e2 >= ady) {
+      err += ady;
+      x0 += sx;
+    }
+    if (e2 <= adx) {
+      err += adx;
+      y0 += sy;
+    }
+  }
+
+  return true;
+}
+
 CyberTier OperativeState::organ_tier(OrganSlot slot) const noexcept {
   return organs.at(static_cast<std::size_t>(slot));
 }
@@ -94,6 +230,13 @@ SyndicateLedger* MegacitySimulation::find_syndicate_mut(
 const DistrictState* MegacitySimulation::find_district(
     DistrictId id) const noexcept {
   for (const auto& dist : districts_) {
+    if (dist.id == id) return &dist;
+  }
+  return nullptr;
+}
+
+DistrictState* MegacitySimulation::find_district_mut(DistrictId id) noexcept {
+  for (auto& dist : districts_) {
     if (dist.id == id) return &dist;
   }
   return nullptr;
@@ -250,19 +393,16 @@ void MegacitySimulation::propagate_structural_collapse(
     building.state = BuildingState::Rubble;
     building.rebuild_ticks_remaining = building.rebuild_total_ticks;
 
-    // Seamless 3-stratum vertical drop-through for operatives on collapsed
-    // upper strata inside this building.
     for (auto& syndicate : syndicates_) {
       for (auto& op : syndicate.squad) {
         if (op.occupied_building == building.id &&
             op.current_stratum == Stratum::Spire) {
           op.current_stratum = Stratum::Street;
+          op.grid_pos.stratum = Stratum::Street;
         }
       }
     }
 
-    // If this building houses a City Organ, apply organ destruction
-    // side-effects
     for (auto& district : districts_) {
       if (district.id != building.district_id || !building.houses_city_organ) {
         continue;
@@ -421,7 +561,6 @@ bool MegacitySimulation::apply_command(const SimulationCommand& cmd) {
     if (it == syn->cryo_vault_salvage.end()) return false;
 
     if (use_salvage->reverse_engineer) {
-      // Path 3B: Sacrifice physical salvaged unit for +50% R&D breakthrough
       it->quantity -= 1;
       const Credits req_cost =
           effective_research_cost(syn->id, use_salvage->blueprint_id);
@@ -454,8 +593,6 @@ bool MegacitySimulation::apply_command(const SimulationCommand& cmd) {
       return true;
     }
 
-    // Path 3A: Direct physical bolt-on of a single salvaged unit without
-    // requiring blueprint unlock.
     if (use_salvage->operative_index >= syn->squad.size()) return false;
     it->quantity -= 1;
     auto& op = syn->squad.at(use_salvage->operative_index);
@@ -463,6 +600,55 @@ bool MegacitySimulation::apply_command(const SimulationCommand& cmd) {
       op.set_organ_tier(bp->organ_slot, bp->cyber_tier);
     } else {
       op.primary_weapon = bp->weapon_id;
+    }
+    return true;
+  }
+
+  if (const auto* traverse = std::get_if<CommandTraverseVerticalShaft>(&cmd)) {
+    auto* syn = find_syndicate_mut(traverse->syndicate_id);
+    const auto* dist = find_district(traverse->district_id);
+    if (syn == nullptr || dist == nullptr ||
+        traverse->operative_index >= syn->squad.size()) {
+      return false;
+    }
+    auto& op = syn->squad.at(traverse->operative_index);
+    if (!op.alive || !dist->tactical_grid.can_traverse_vertical(
+                         op.grid_pos, traverse->target_stratum)) {
+      return false;
+    }
+    op.current_stratum = traverse->target_stratum;
+    op.grid_pos.stratum = traverse->target_stratum;
+    return true;
+  }
+
+  if (const auto* breach = std::get_if<CommandBreachFloorSlab>(&cmd)) {
+    auto* dist = find_district_mut(breach->district_id);
+    if (dist == nullptr || !dist->tactical_grid.in_bounds(breach->coord) ||
+        breach->coord.stratum == Stratum::UnderGrid) {
+      return false;
+    }
+    SectorCell updated = dist->tactical_grid.cell(breach->coord);
+    updated.breached = true;
+    updated.kind = TileKind::Void;
+    dist->tactical_grid.set_cell(breach->coord, updated);
+
+    const Stratum lower_stratum = (breach->coord.stratum == Stratum::Spire)
+                                      ? Stratum::Street
+                                      : Stratum::UnderGrid;
+
+    for (auto& syn : syndicates_) {
+      for (auto& op : syn.squad) {
+        if (op.alive && op.grid_pos == breach->coord) {
+          op.current_stratum = lower_stratum;
+          op.grid_pos.stratum = lower_stratum;
+          const int legs_mitigation =
+              static_cast<int>(op.organ_tier(OrganSlot::Legs)) * 5;
+          op.health = std::max(0, op.health - (30 - legs_mitigation));
+          if (op.health == 0) {
+            op.alive = false;
+          }
+        }
+      }
     }
     return true;
   }
@@ -570,6 +756,64 @@ void MegacitySimulation::step_tick() {
   step_rebuilds();
 }
 
+std::optional<RaidOutcome> MegacitySimulation::step_rival_ai(
+    SyndicateId rival_id) {
+  auto* rival = find_syndicate_mut(rival_id);
+  if (rival == nullptr) return std::nullopt;
+
+  // Priority 1: Rebuild any destroyed City Organ building owned by this rival
+  for (const auto& district : districts_) {
+    if (district.owner_syndicate != rival_id) continue;
+    for (const BuildingId bid : district.buildings) {
+      const auto* bld = find_building(bid);
+      if (bld != nullptr && bld->houses_city_organ &&
+          bld->state == BuildingState::Rubble &&
+          rival->treasury >= bld->rebuild_total_cost) {
+        apply_command(CommandFundRebuild{
+            .syndicate_id = rival_id,
+            .building_id = bid,
+        });
+        break;
+      }
+    }
+  }
+
+  // Priority 2: Ensure an active R&D budget is running on the first locked
+  // blueprint if treasury exceeds reserve
+  if (!blueprints_.empty() && rival->treasury >= 1500) {
+    for (const auto& bp : blueprints_) {
+      const bool already_unlocked = std::ranges::any_of(
+          rival->research, [&](const ResearchProgress& proj) {
+            return proj.blueprint_id == bp.id && proj.unlocked;
+          });
+      if (!already_unlocked) {
+        apply_command(CommandAllocateResearch{
+            .syndicate_id = rival_id,
+            .blueprint_id = bp.id,
+            .daily_budget = 250,
+        });
+        break;
+      }
+    }
+  }
+
+  // Priority 3: Launch a raid against the weakest non-owned district if squad
+  // is healthy
+  const DistrictState* best_target = nullptr;
+  for (const auto& district : districts_) {
+    if (district.owner_syndicate == rival_id) continue;
+    if (best_target == nullptr ||
+        district.security_budget < best_target->security_budget) {
+      best_target = &district;
+    }
+  }
+
+  if (best_target != nullptr) {
+    return resolve_district_raid(rival_id, best_target->id, false);
+  }
+  return std::nullopt;
+}
+
 bool MegacitySimulation::trigger_power_reroute_blackout(
     SyndicateId syndicate_id, DistrictId target_district_id) {
   if (!controls_intact_organ(syndicate_id, CityOrgan::PowerSubGrid)) {
@@ -659,13 +903,7 @@ RaidOutcome MegacitySimulation::resolve_district_raid(
       .loot_credits = 0,
   };
 
-  DistrictState* target_district = nullptr;
-  for (auto& d : districts_) {
-    if (d.id == district_id) {
-      target_district = &d;
-      break;
-    }
-  }
+  DistrictState* target_district = find_district_mut(district_id);
   auto* attacker = find_syndicate_mut(attacker_id);
   if (target_district == nullptr || attacker == nullptr) return outcome;
 
@@ -753,6 +991,9 @@ std::uint64_t MegacitySimulation::state_digest() const noexcept {
     for (const auto& op : syn.squad) {
       hash = fnv1a_mix(hash, op.id);
       hash = fnv1a_mix(hash, static_cast<std::uint64_t>(op.current_stratum));
+      hash = fnv1a_mix(hash, static_cast<std::uint64_t>(op.grid_pos.x));
+      hash = fnv1a_mix(hash, static_cast<std::uint64_t>(op.grid_pos.y));
+      hash = fnv1a_mix(hash, static_cast<std::uint64_t>(op.health));
       hash = fnv1a_mix(hash, static_cast<std::uint64_t>(op.overclock));
       hash = fnv1a_mix(hash, static_cast<std::uint64_t>(op.medical_status));
       for (const CyberTier tier : op.organs) {
@@ -813,18 +1054,22 @@ MegacitySimulation create_default_vertical_slice(SessionMode mode) {
               OperativeState{.id = 101,
                              .callsign = "KESTREL-1",
                              .current_stratum = Stratum::Spire,
+                             .grid_pos = {4, 4, Stratum::Spire},
                              .occupied_building = 10},
               OperativeState{.id = 102,
                              .callsign = "VEX-2",
                              .current_stratum = Stratum::Street,
+                             .grid_pos = {2, 2, Stratum::Street},
                              .occupied_building = 10},
               OperativeState{.id = 103,
                              .callsign = "NULL-3",
                              .current_stratum = Stratum::Street,
+                             .grid_pos = {6, 4, Stratum::Street},
                              .occupied_building = 11},
               OperativeState{.id = 104,
                              .callsign = "CHROME-4",
                              .current_stratum = Stratum::UnderGrid,
+                             .grid_pos = {2, 2, Stratum::UnderGrid},
                              .occupied_building = 11},
           },
       .thralls = {},
@@ -841,18 +1086,22 @@ MegacitySimulation create_default_vertical_slice(SessionMode mode) {
               OperativeState{.id = 201,
                              .callsign = "ONI-1",
                              .current_stratum = Stratum::Street,
+                             .grid_pos = {8, 8, Stratum::Street},
                              .occupied_building = 20},
               OperativeState{.id = 202,
                              .callsign = "ONI-2",
                              .current_stratum = Stratum::Street,
+                             .grid_pos = {9, 8, Stratum::Street},
                              .occupied_building = 20},
               OperativeState{.id = 203,
                              .callsign = "ONI-3",
                              .current_stratum = Stratum::Spire,
+                             .grid_pos = {8, 8, Stratum::Spire},
                              .occupied_building = 21},
               OperativeState{.id = 204,
                              .callsign = "ONI-4",
                              .current_stratum = Stratum::UnderGrid,
+                             .grid_pos = {8, 8, Stratum::UnderGrid},
                              .occupied_building = 21},
           },
       .thralls = {},
@@ -861,7 +1110,7 @@ MegacitySimulation create_default_vertical_slice(SessionMode mode) {
   sim.add_syndicate(std::move(player));
   sim.add_syndicate(std::move(rival));
 
-  sim.add_district(DistrictState{
+  DistrictState kowloon{
       .id = 1,
       .name = "KOWLOON BIO-FOUNDRY SECTOR",
       .owner_syndicate = 1,
@@ -872,7 +1121,25 @@ MegacitySimulation create_default_vertical_slice(SessionMode mode) {
       .security_budget = 120,
       .adjacent_districts = {2, 3},
       .buildings = {},
-  });
+      .tactical_grid = SectorGrid(16, 16),
+  };
+  // Populate Kowloon Bio-Foundry 3-stratum vertical connectors and sky-bridge
+  for (const Stratum s :
+       {Stratum::UnderGrid, Stratum::Street, Stratum::Spire}) {
+    kowloon.tactical_grid.set_cell(
+        GridCoord{2, 2, s},
+        SectorCell{.kind = TileKind::VerticalShaft, .building_id = 10});
+  }
+  for (std::int32_t x = 3; x <= 8; ++x) {
+    kowloon.tactical_grid.set_cell(
+        GridCoord{x, 4, Stratum::Spire},
+        SectorCell{.kind = TileKind::SpireSkybridge, .building_id = 10});
+  }
+  kowloon.tactical_grid.set_cell(
+      GridCoord{5, 4, Stratum::Street},
+      SectorCell{.kind = TileKind::OpaqueWall, .building_id = 10});
+
+  sim.add_district(std::move(kowloon));
 
   sim.add_district(DistrictState{
       .id = 2,

@@ -15,10 +15,6 @@ void require(bool condition, const char* message) {
 void test_symmetric_three_path_progression() {
   auto sim = wetware::create_default_vertical_slice();
 
-  // Player (Syndicate 1) controls intact Bio-Foundry (District 1) -> -65% R&D
-  // cost and time (35% of 2000 = 700 credits, 35% of 10 = 4 ticks).
-  // Rival (Syndicate 2) does not control Bio-Foundry -> full 2000 credits, 10
-  // ticks.
   require(sim.effective_research_cost(1, 1) == 700,
           "Bio-Foundry owner gets -65% R&D cost on V3 cyberware");
   require(sim.effective_research_ticks(1, 1) == 4,
@@ -26,8 +22,6 @@ void test_symmetric_three_path_progression() {
   require(sim.effective_research_cost(2, 1) == 2000,
           "Non-owner pays base R&D cost");
 
-  // Path 3A: Rival salvages physical V3 Legs from the field and bolts it
-  // directly onto operative 0 without unlocking the blueprint.
   require(sim.apply_command(wetware::CommandSalvageFieldHardware{
               .syndicate_id = 2, .blueprint_id = 1, .quantity = 2}),
           "Salvage 2 units of V3 legs");
@@ -43,7 +37,6 @@ void test_symmetric_three_path_progression() {
               wetware::CyberTier::V3,
           "Rival operative 0 now wears salvaged V3 legs");
 
-  // Path 3B: Rival sacrifices 2nd salvaged unit for +50% R&D breakthrough
   require(sim.apply_command(wetware::CommandUseSalvage{.syndicate_id = 2,
                                                        .blueprint_id = 1,
                                                        .reverse_engineer = true,
@@ -58,12 +51,10 @@ void test_symmetric_three_path_progression() {
 void test_three_stratum_cascading_collapse_and_rebuild() {
   auto sim = wetware::create_default_vertical_slice();
 
-  // Operative 0 starts on Spire stratum of Building 10 (Kowloon Bio-Foundry)
   const auto* player = sim.find_syndicate(1);
   require(player->squad.at(0).current_stratum == wetware::Stratum::Spire,
           "Operative 0 starts on Spire stratum");
 
-  // Shear 3 of 4 load-bearing columns on the Street stratum of Building 10
   require(sim.apply_command(
               wetware::CommandShearColumns{.building_id = 10,
                                            .stratum = wetware::Stratum::Street,
@@ -78,14 +69,11 @@ void test_three_stratum_cascading_collapse_and_rebuild() {
   require(player->squad.at(0).current_stratum == wetware::Stratum::Street,
           "Operative on collapsed Spire sky-bridge drops to Street stratum");
 
-  // Because Bio-Foundry is now rubble, Player loses the -65% Bio-Foundry
-  // accelerator until rebuilt!
   require(!sim.controls_intact_organ(1, wetware::CityOrgan::BioFoundry),
           "Destroyed Bio-Foundry no longer grants intact organ perk");
   require(sim.effective_research_cost(1, 1) == 2000,
           "Player R&D cost reverts to base while Bio-Foundry is rubble");
 
-  // Fund reconstruction and step 5 ticks
   require(sim.apply_command(wetware::CommandFundRebuild{.syndicate_id = 1,
                                                         .building_id = 10}),
           "Fund reconstruction of Building 10");
@@ -124,13 +112,73 @@ void test_sp_and_mp_overclock_and_persuadertron() {
               wetware::OverclockState::HyperReflexSurge,
           "MP operative enters real-time HyperReflexSurge");
 
-  // Persuadertron chain-hijack test:
-  // Syndicate 2 controls intact Broadcast Spire (2x bandwidth -> 30.0 base).
   require(sp_sim.attempt_persuade(
               2, 0, 9001, wetware::PersuadeTargetClass::Police, 2,
               wetware::Stratum::Street, wetware::ThrallDirective::SleeperNode),
           "Broadcast Spire owner has sufficient bandwidth to hijack Police as "
           "Sleeper Node");
+}
+
+void test_sector_grid_vertical_traversal_sightline_and_breach() {
+  auto sim = wetware::create_default_vertical_slice();
+
+  // Operative 1 (VEX-2) is at (2, 2, Street) inside a VerticalShaft cell
+  require(sim.apply_command(wetware::CommandTraverseVerticalShaft{
+              .syndicate_id = 1,
+              .operative_index = 1,
+              .district_id = 1,
+              .target_stratum = wetware::Stratum::UnderGrid}),
+          "Traverse freight shaft from Street down to UnderGrid");
+  require(sim.find_syndicate(1)->squad.at(1).current_stratum ==
+              wetware::Stratum::UnderGrid,
+          "VEX-2 is now in UnderGrid stratum");
+
+  // Sightline test across OpaqueWall at (5, 4, Street) between (3, 4, Street)
+  // and (7, 4, Street)
+  const auto* kowloon = sim.find_district(1);
+  require(kowloon != nullptr, "Kowloon district exists");
+  require(!kowloon->tactical_grid.has_sightline(
+              wetware::GridCoord{3, 4, wetware::Stratum::Street},
+              wetware::GridCoord{7, 4, wetware::Stratum::Street}, 0.40, 1U),
+          "Opaque wall blocks baseline sightline when Perception is low");
+  require(kowloon->tactical_grid.has_sightline(
+              wetware::GridCoord{3, 4, wetware::Stratum::Street},
+              wetware::GridCoord{7, 4, wetware::Stratum::Street}, 0.85, 3U),
+          "High Perception (0.85) + V3 Eyes penetrates 1 opaque wall via "
+          "thermal silhouette");
+
+  // Breach sky-bridge slab under Operative 0 at (4, 4, Spire)
+  require(sim.apply_command(wetware::CommandBreachFloorSlab{
+              .district_id = 1,
+              .coord = wetware::GridCoord{4, 4, wetware::Stratum::Spire}}),
+          "Breach sky-bridge slab at (4, 4, Spire)");
+  const auto& op0 = sim.find_syndicate(1)->squad.at(0);
+  require(op0.current_stratum == wetware::Stratum::Street && op0.health < 100,
+          "Breaching sky-bridge slab drops operative to Street with fall "
+          "impact damage");
+}
+
+void test_rival_ai_controller() {
+  auto sim = wetware::create_default_vertical_slice();
+
+  // Collapse Rival's Broadcast Spire (Building 20) and verify Rival AI funds
+  // reconstruction + R&D + launches a raid
+  require(sim.apply_command(
+              wetware::CommandShearColumns{.building_id = 20,
+                                           .stratum = wetware::Stratum::Street,
+                                           .columns_destroyed = 4}),
+          "Destroy Rival Broadcast Spire");
+  require(sim.find_building(20)->state == wetware::BuildingState::Rubble,
+          "Broadcast Spire is rubble");
+
+  const auto outcome = sim.step_rival_ai(2);
+  require(sim.find_building(20)->state == wetware::BuildingState::Rebuilding,
+          "Rival AI automatically prioritizes rebuilding its destroyed City "
+          "Organ");
+  require(!sim.find_syndicate(2)->research.empty(),
+          "Rival AI allocates R&D budget");
+  require(outcome.has_value() && outcome->district_id == 1,
+          "Rival AI evaluates and dispatches raid against District 1");
 }
 
 void test_deterministic_command_replay() {
@@ -143,6 +191,14 @@ void test_deterministic_command_replay() {
       wetware::CommandAllocateResearch{
           .syndicate_id = 1, .blueprint_id = 1, .daily_budget = 350},
       wetware::CommandTriggerOverclock{.syndicate_id = 2, .active = true},
+      wetware::CommandTraverseVerticalShaft{.syndicate_id = 1,
+                                            .operative_index = 1,
+                                            .district_id = 1,
+                                            .target_stratum =
+                                                wetware::Stratum::Spire},
+      wetware::CommandBreachFloorSlab{
+          .district_id = 1,
+          .coord = wetware::GridCoord{4, 4, wetware::Stratum::Spire}},
       wetware::CommandShearColumns{.building_id = 21,
                                    .stratum = wetware::Stratum::Street,
                                    .columns_destroyed = 4},
@@ -165,6 +221,8 @@ int main() {
   test_symmetric_three_path_progression();
   test_three_stratum_cascading_collapse_and_rebuild();
   test_sp_and_mp_overclock_and_persuadertron();
+  test_sector_grid_vertical_traversal_sightline_and_breach();
+  test_rival_ai_controller();
   test_deterministic_command_replay();
   std::cout << "All wetware C++23 simulation tests passed.\n";
   return 0;

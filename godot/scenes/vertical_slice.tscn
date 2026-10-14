@@ -1,24 +1,72 @@
-[gd_scene load_steps=9 format=3 uid="uid://wetware_vertical_slice"]
+[gd_scene load_steps=26 format=3 uid="uid://wetware_vertical_slice"]
 
 [ext_resource type="Script" path="res://scenes/vertical_slice.gd" id="1_script"]
 [ext_resource type="Shader" path="res://shaders/isometric_25d.gdshader" id="2_shader"]
-[ext_resource type="Texture2D" path="res://assets/tiles/street_neon_albedo.png" id="3_tile_albedo"]
-[ext_resource type="Texture2D" path="res://assets/normals/street_neon_normal.png" id="4_tile_normal"]
-[ext_resource type="Texture2D" path="res://assets/tiles/street_neon_emissive.png" id="5_tile_emissive"]
+[ext_resource type="Texture2D" path="res://assets/tiles/street_neon_albedo.png" id="3_street_albedo"]
+[ext_resource type="Texture2D" path="res://assets/normals/street_neon_normal.png" id="4_street_normal"]
+[ext_resource type="Texture2D" path="res://assets/tiles/street_neon_emissive.png" id="5_street_emissive"]
 [ext_resource type="Texture2D" path="res://assets/sprites/operative_trenchcoat_albedo.png" id="6_op_albedo"]
 [ext_resource type="Texture2D" path="res://assets/normals/operative_trenchcoat_normal.png" id="7_op_normal"]
 [ext_resource type="Texture2D" path="res://assets/sprites/operative_trenchcoat_emissive.png" id="8_op_emissive"]
+[ext_resource type="Texture2D" path="res://assets/tiles/undergrid_grate_albedo.png" id="9_under_albedo"]
+[ext_resource type="Texture2D" path="res://assets/normals/undergrid_grate_normal.png" id="10_under_normal"]
+[ext_resource type="Texture2D" path="res://assets/tiles/undergrid_grate_emissive.png" id="11_under_emissive"]
+[ext_resource type="Texture2D" path="res://assets/tiles/spire_skybridge_albedo.png" id="12_spire_albedo"]
+[ext_resource type="Texture2D" path="res://assets/normals/spire_skybridge_normal.png" id="13_spire_normal"]
+[ext_resource type="Texture2D" path="res://assets/tiles/spire_skybridge_emissive.png" id="14_spire_emissive"]
+[ext_resource type="Texture2D" path="res://assets/tiles/biofoundry_tower_intact_albedo.png" id="15_tower_albedo"]
+[ext_resource type="Texture2D" path="res://assets/normals/biofoundry_tower_intact_normal.png" id="16_tower_normal"]
+[ext_resource type="Texture2D" path="res://assets/tiles/biofoundry_tower_intact_emissive.png" id="17_tower_emissive"]
+[ext_resource type="Texture2D" path="res://assets/tiles/biofoundry_tower_rubble_albedo.png" id="18_rubble_albedo"]
+[ext_resource type="Texture2D" path="res://assets/normals/biofoundry_tower_rubble_normal.png" id="19_rubble_normal"]
+[ext_resource type="Texture2D" path="res://assets/tiles/biofoundry_tower_rubble_emissive.png" id="20_rubble_emissive"]
 
-[sub_resource type="ShaderMaterial" id="ShaderMaterial_tile"]
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_undergrid"]
 shader = ExtResource("2_shader")
-shader_parameter/normal_map = ExtResource("4_tile_normal")
-shader_parameter/emissive_mask = ExtResource("5_tile_emissive")
+shader_parameter/normal_map = ExtResource("10_under_normal")
+shader_parameter/emissive_mask = ExtResource("11_under_emissive")
+shader_parameter/rim_strength = 1.45
+shader_parameter/bloom_strength = 1.35
+shader_parameter/background_bloom = 0.25
+shader_parameter/stratum_cutaway_alpha = 0.65
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_street"]
+shader = ExtResource("2_shader")
+shader_parameter/normal_map = ExtResource("4_street_normal")
+shader_parameter/emissive_mask = ExtResource("5_street_emissive")
 shader_parameter/rim_strength = 1.65
 shader_parameter/bloom_strength = 1.4
 shader_parameter/background_bloom = 0.35
 shader_parameter/stratum_cutaway_alpha = 1.0
 
-[sub_resource type="ShaderMaterial" id="ShaderMaterial_operative"]
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_spire"]
+shader = ExtResource("2_shader")
+shader_parameter/normal_map = ExtResource("13_spire_normal")
+shader_parameter/emissive_mask = ExtResource("14_spire_emissive")
+shader_parameter/rim_strength = 1.75
+shader_parameter/bloom_strength = 1.55
+shader_parameter/background_bloom = 0.35
+shader_parameter/stratum_cutaway_alpha = 0.18
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_tower"]
+shader = ExtResource("2_shader")
+shader_parameter/normal_map = ExtResource("16_tower_normal")
+shader_parameter/emissive_mask = ExtResource("17_tower_emissive")
+shader_parameter/rim_strength = 1.8
+shader_parameter/bloom_strength = 1.65
+shader_parameter/background_bloom = 0.35
+shader_parameter/stratum_cutaway_alpha = 1.0
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_rubble"]
+shader = ExtResource("2_shader")
+shader_parameter/normal_map = ExtResource("19_rubble_normal")
+shader_parameter/emissive_mask = ExtResource("20_rubble_emissive")
+shader_parameter/rim_strength = 1.6
+shader_parameter/bloom_strength = 1.8
+shader_parameter/background_bloom = 0.35
+shader_parameter/stratum_cutaway_alpha = 1.0
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_operative_street"]
 shader = ExtResource("2_shader")
 shader_parameter/normal_map = ExtResource("7_op_normal")
 shader_parameter/emissive_mask = ExtResource("8_op_emissive")
@@ -30,14 +78,57 @@ shader_parameter/stratum_cutaway_alpha = 1.0
 [node name="VerticalSliceSector" type="Node2D"]
 script = ExtResource("1_script")
 
+[node name="UnderGridCatwalk" type="Sprite2D" parent="."]
+material = SubResource("ShaderMaterial_undergrid")
+position = Vector2(320, 248)
+texture = ExtResource("9_under_albedo")
+metadata/stratum = 0
+
 [node name="StreetTileRoot" type="Sprite2D" parent="."]
-material = SubResource("ShaderMaterial_tile")
+material = SubResource("ShaderMaterial_street")
 position = Vector2(320, 200)
-texture = ExtResource("3_tile_albedo")
+texture = ExtResource("3_street_albedo")
 metadata/stratum = 1
 
+[node name="BioFoundryTowerIntact" type="Sprite2D" parent="."]
+material = SubResource("ShaderMaterial_tower")
+position = Vector2(320, 168)
+texture = ExtResource("15_tower_albedo")
+metadata/stratum = 1
+
+[node name="BioFoundryTowerRubble" type="Sprite2D" parent="."]
+visible = false
+material = SubResource("ShaderMaterial_rubble")
+position = Vector2(320, 168)
+texture = ExtResource("18_rubble_albedo")
+metadata/stratum = 1
+
+[node name="SpireSkybridge" type="Sprite2D" parent="."]
+material = SubResource("ShaderMaterial_spire")
+position = Vector2(320, 136)
+texture = ExtResource("12_spire_albedo")
+metadata/stratum = 2
+
 [node name="OperativeKestrel1" type="Sprite2D" parent="."]
-material = SubResource("ShaderMaterial_operative")
-position = Vector2(320, 184)
+material = SubResource("ShaderMaterial_spire")
+position = Vector2(320, 120)
+texture = ExtResource("6_op_albedo")
+metadata/stratum = 2
+
+[node name="OperativeVex2" type="Sprite2D" parent="."]
+material = SubResource("ShaderMaterial_operative_street")
+position = Vector2(296, 188)
 texture = ExtResource("6_op_albedo")
 metadata/stratum = 1
+
+[node name="OperativeNull3" type="Sprite2D" parent="."]
+material = SubResource("ShaderMaterial_operative_street")
+position = Vector2(344, 188)
+texture = ExtResource("6_op_albedo")
+metadata/stratum = 1
+
+[node name="OperativeChrome4" type="Sprite2D" parent="."]
+material = SubResource("ShaderMaterial_undergrid")
+position = Vector2(320, 232)
+texture = ExtResource("6_op_albedo")
+metadata/stratum = 0
