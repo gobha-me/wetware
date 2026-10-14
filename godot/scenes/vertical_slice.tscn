@@ -1,0 +1,43 @@
+[gd_scene load_steps=9 format=3 uid="uid://wetware_vertical_slice"]
+
+[ext_resource type="Script" path="res://scenes/vertical_slice.gd" id="1_script"]
+[ext_resource type="Shader" path="res://shaders/isometric_25d.gdshader" id="2_shader"]
+[ext_resource type="Texture2D" path="res://assets/tiles/street_neon_albedo.png" id="3_tile_albedo"]
+[ext_resource type="Texture2D" path="res://assets/normals/street_neon_normal.png" id="4_tile_normal"]
+[ext_resource type="Texture2D" path="res://assets/tiles/street_neon_emissive.png" id="5_tile_emissive"]
+[ext_resource type="Texture2D" path="res://assets/sprites/operative_trenchcoat_albedo.png" id="6_op_albedo"]
+[ext_resource type="Texture2D" path="res://assets/normals/operative_trenchcoat_normal.png" id="7_op_normal"]
+[ext_resource type="Texture2D" path="res://assets/sprites/operative_trenchcoat_emissive.png" id="8_op_emissive"]
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_tile"]
+shader = ExtResource("2_shader")
+shader_parameter/normal_map = ExtResource("4_tile_normal")
+shader_parameter/emissive_mask = ExtResource("5_tile_emissive")
+shader_parameter/rim_strength = 1.65
+shader_parameter/bloom_strength = 1.4
+shader_parameter/background_bloom = 0.35
+shader_parameter/stratum_cutaway_alpha = 1.0
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_operative"]
+shader = ExtResource("2_shader")
+shader_parameter/normal_map = ExtResource("7_op_normal")
+shader_parameter/emissive_mask = ExtResource("8_op_emissive")
+shader_parameter/rim_strength = 1.85
+shader_parameter/bloom_strength = 1.6
+shader_parameter/background_bloom = 0.35
+shader_parameter/stratum_cutaway_alpha = 1.0
+
+[node name="VerticalSliceSector" type="Node2D"]
+script = ExtResource("1_script")
+
+[node name="StreetTileRoot" type="Sprite2D" parent="."]
+material = SubResource("ShaderMaterial_tile")
+position = Vector2(320, 200)
+texture = ExtResource("3_tile_albedo")
+metadata/stratum = 1
+
+[node name="OperativeKestrel1" type="Sprite2D" parent="."]
+material = SubResource("ShaderMaterial_operative")
+position = Vector2(320, 184)
+texture = ExtResource("6_op_albedo")
+metadata/stratum = 1

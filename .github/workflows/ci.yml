@@ -1,0 +1,78 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    name: formatting and static analysis
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Clang tooling
+        env:
+          CLANG_VERSION: "20"
+        run: |
+          wget -qO /tmp/llvm.sh https://apt.llvm.org/llvm.sh
+          chmod +x /tmp/llvm.sh
+          sudo /tmp/llvm.sh "$CLANG_VERSION"
+          sudo apt-get install -y \
+            "clang-format-$CLANG_VERSION" \
+            "clang-tidy-$CLANG_VERSION"
+
+      - name: Check formatting
+        run: tools/format.sh --check
+
+      - name: Run static analysis
+        run: tools/lint.sh
+
+  build:
+    name: ${{ matrix.name }}
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: GCC 14 (C++23)
+            cxx: g++
+          - name: Clang 20 (C++23)
+            cxx: clang++
+            clang: "20"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Clang
+        if: matrix.clang
+        env:
+          CLANG_VERSION: ${{ matrix.clang }}
+        run: |
+          wget -qO /tmp/llvm.sh https://apt.llvm.org/llvm.sh
+          chmod +x /tmp/llvm.sh
+          sudo /tmp/llvm.sh "$CLANG_VERSION"
+          sudo ln -sf "/usr/bin/clang++-$CLANG_VERSION" /usr/local/bin/clang++
+
+      - name: Configure
+        env:
+          CXX: ${{ matrix.cxx }}
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: cmake --build build --parallel 4
+
+      - name: Test
+        run: ctest --test-dir build --output-on-failure -j4
+
+      - name: Verify CLI deterministic snapshot
+        run: ./build/wetware_cli
