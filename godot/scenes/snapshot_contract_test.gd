@@ -48,6 +48,10 @@ func _initialize() -> void:
 		return
 
 	var default_dict := default_data as Dictionary
+	if (default_dict["syndicates"] as Array).size() != 4 or (default_dict["districts"] as Array).size() != 6:
+		push_error("M8 snapshot missing 4 syndicates or 6 megacity districts")
+		quit(1)
+		return
 	var dist0: Dictionary = default_dict["districts"][0]
 	if not dist0.has("crowd_surge_active") or not dist0.has("monorail_wreck_lootable") or not dist0.has("corpse_drops_count") or not dist0.has("transformer_intact") or not dist0.has("executive_convoy_active"):
 		push_error("Snapshot district telemetry missing M3/M4 fields")
@@ -75,8 +79,8 @@ func _initialize() -> void:
 			quit(1)
 			return
 
-	if sector._city_buildings.size() < 10 or sector._proc_civilians.size() != 10 or sector._puppet_identities.size() != 4:
-		push_error("M7 dense city blocks, procedural civilian crowd, or cortical meat-puppet roster not initialized")
+	if sector._city_buildings.size() < 10 or sector._proc_civilians.size() != 10 or sector._puppet_identities.size() != 4 or sector._rival_operatives.size() != 8:
+		push_error("M7/M8 dense city blocks, procedural civilian crowd, cortical meat-puppet roster, or 8 rival operatives not initialized")
 		quit(1)
 		return
 

@@ -379,13 +379,21 @@ struct CommandInterceptExecutiveConvoy {
   DistrictId district_id{0};
 };
 
-using SimulationCommand = std::variant<
-    CommandSetBiochem, CommandTriggerOverclock, CommandShearColumns,
-    CommandFundRebuild, CommandAllocateResearch, CommandSalvageFieldHardware,
-    CommandUseSalvage, CommandTraverseVerticalShaft, CommandBreachFloorSlab,
-    CommandFireOrdinance, CommandExtractCorpseSalvage,
-    CommandTriggerThrallDirective, CommandLootMonorailWreck,
-    CommandSabotageTransformer, CommandInterceptExecutiveConvoy>;
+struct CommandThawCryoReplacement {
+  SyndicateId syndicate_id{0};
+  std::size_t operative_index{0};
+  std::string new_callsign;
+};
+
+using SimulationCommand =
+    std::variant<CommandSetBiochem, CommandTriggerOverclock,
+                 CommandShearColumns, CommandFundRebuild,
+                 CommandAllocateResearch, CommandSalvageFieldHardware,
+                 CommandUseSalvage, CommandTraverseVerticalShaft,
+                 CommandBreachFloorSlab, CommandFireOrdinance,
+                 CommandExtractCorpseSalvage, CommandTriggerThrallDirective,
+                 CommandLootMonorailWreck, CommandSabotageTransformer,
+                 CommandInterceptExecutiveConvoy, CommandThawCryoReplacement>;
 
 class MegacitySimulation {
  public:
