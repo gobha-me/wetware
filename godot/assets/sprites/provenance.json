@@ -1,0 +1,77 @@
+{
+  "generator": "venice-sd35 + 32-color Bayer pixel quantizer + wetware 2.5D Sobel pipeline",
+  "portraits": [
+    {
+      "id": "portrait_kestrel_1",
+      "output": "portrait_kestrel_1.png",
+      "dimensions": "96x96 (32-color Bayer dithered pixel art)",
+      "venice_metadata": {
+        "embed_exif_metadata": false,
+        "format": "png",
+        "height": 1024,
+        "hide_watermark": true,
+        "model": "venice-sd35",
+        "prompt": "1990s Syndicate Wars style dark cyberpunk cyborg operative close-up ID portrait, female covert Wetware squad leader Kestrel-1, black high-collar leather trenchcoat, glowing crimson cybernetic visor across eyes, chrome neural socket on neck, dark background with cyan neon rim light, gritty 24-bit pixel art portrait",
+        "return_binary": false,
+        "safe_mode": false,
+        "seed": 8477150,
+        "steps": 20,
+        "width": 1024
+      }
+    },
+    {
+      "id": "portrait_vex_2",
+      "output": "portrait_vex_2.png",
+      "dimensions": "96x96 (32-color Bayer dithered pixel art)",
+      "venice_metadata": {
+        "embed_exif_metadata": false,
+        "format": "png",
+        "height": 1024,
+        "hide_watermark": true,
+        "model": "venice-sd35",
+        "prompt": "1990s Syndicate Wars style dark cyberpunk cyborg heavy weapons operative close-up ID portrait, male operative Vex-2, scarred jaw with chrome subdermal plating, glowing amber targeting eye implant, black ballistic trenchcoat collar, dark background with emerald neon rim light, gritty 24-bit pixel art portrait",
+        "return_binary": false,
+        "safe_mode": false,
+        "seed": 295463294,
+        "steps": 20,
+        "width": 1024
+      }
+    },
+    {
+      "id": "portrait_null_3",
+      "output": "portrait_null_3.png",
+      "dimensions": "96x96 (32-color Bayer dithered pixel art)",
+      "venice_metadata": {
+        "embed_exif_metadata": false,
+        "format": "png",
+        "height": 1024,
+        "hide_watermark": true,
+        "model": "venice-sd35",
+        "prompt": "1990s Syndicate Wars style dark cyberpunk neural hacker cyborg operative close-up ID portrait, operative Null-3, pale synthetic skin with braided fiber-optic neural cables into skull and glowing cyan multi-lens optic array, dark trenchcoat collar, magenta neon rim light, gritty 24-bit pixel art portrait",
+        "return_binary": false,
+        "safe_mode": false,
+        "seed": -802915905,
+        "steps": 20,
+        "width": 1024
+      }
+    },
+    {
+      "id": "portrait_chrome_4",
+      "output": "portrait_chrome_4.png",
+      "dimensions": "96x96 (32-color Bayer dithered pixel art)",
+      "venice_metadata": {
+        "embed_exif_metadata": false,
+        "format": "png",
+        "height": 1024,
+        "hide_watermark": true,
+        "model": "venice-sd35",
+        "prompt": "1990s Syndicate Wars style dark cyberpunk full-conversion cyborg operative close-up ID portrait, operative Chrome-4, matte black titanium skull faceplate with glowing red vertical optical slit, exposed hydraulic neck pistons and leather trenchcoat collar, dark background, gritty 24-bit pixel art portrait",
+        "return_binary": false,
+        "safe_mode": false,
+        "seed": 95766207,
+        "steps": 20,
+        "width": 1024
+      }
+    }
+  ]
+}

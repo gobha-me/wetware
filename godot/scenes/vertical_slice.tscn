@@ -1,4 +1,4 @@
-[gd_scene load_steps=70 format=3 uid="uid://wetware_vertical_slice"]
+[gd_scene load_steps=115 format=3 uid="uid://wetware_vertical_slice"]
 
 [ext_resource type="Script" path="res://scenes/vertical_slice.gd" id="1_script"]
 [ext_resource type="Shader" path="res://shaders/isometric_25d.gdshader" id="2_shader"]
@@ -53,6 +53,37 @@
 [ext_resource type="Texture2D" path="res://assets/vehicles/data_vault_mainframe_rack_iso8_albedo.png" id="51_mainframe_albedo"]
 [ext_resource type="Texture2D" path="res://assets/vehicles/data_vault_mainframe_rack_iso8_normal.png" id="52_mainframe_normal"]
 [ext_resource type="Texture2D" path="res://assets/vehicles/data_vault_mainframe_rack_iso8_emissive.png" id="53_mainframe_emissive"]
+[ext_resource type="Texture2D" path="res://assets/vehicles/heavy_riot_bulldozer_iso8_albedo.png" id="54_dozer_albedo"]
+[ext_resource type="Texture2D" path="res://assets/vehicles/heavy_riot_bulldozer_iso8_normal.png" id="55_dozer_normal"]
+[ext_resource type="Texture2D" path="res://assets/vehicles/heavy_riot_bulldozer_iso8_emissive.png" id="56_dozer_emissive"]
+[ext_resource type="Texture2D" path="res://assets/vehicles/autonomous_cargo_hauler_iso8_albedo.png" id="57_hauler_albedo"]
+[ext_resource type="Texture2D" path="res://assets/vehicles/autonomous_cargo_hauler_iso8_normal.png" id="58_hauler_normal"]
+[ext_resource type="Texture2D" path="res://assets/vehicles/autonomous_cargo_hauler_iso8_emissive.png" id="59_hauler_emissive"]
+[ext_resource type="Texture2D" path="res://assets/vehicles/hazmat_decon_rig_iso8_albedo.png" id="60_decon_albedo"]
+[ext_resource type="Texture2D" path="res://assets/vehicles/hazmat_decon_rig_iso8_normal.png" id="61_decon_normal"]
+[ext_resource type="Texture2D" path="res://assets/vehicles/hazmat_decon_rig_iso8_emissive.png" id="62_decon_emissive"]
+[ext_resource type="Texture2D" path="res://assets/vehicles/concrete_riot_barricade_iso8_albedo.png" id="63_barricade_albedo"]
+[ext_resource type="Texture2D" path="res://assets/vehicles/concrete_riot_barricade_iso8_normal.png" id="64_barricade_normal"]
+[ext_resource type="Texture2D" path="res://assets/vehicles/concrete_riot_barricade_iso8_emissive.png" id="65_barricade_emissive"]
+[ext_resource type="Texture2D" path="res://assets/vehicles/automated_checkpoint_gate_iso8_albedo.png" id="66_gate_albedo"]
+[ext_resource type="Texture2D" path="res://assets/vehicles/automated_checkpoint_gate_iso8_normal.png" id="67_gate_normal"]
+[ext_resource type="Texture2D" path="res://assets/vehicles/automated_checkpoint_gate_iso8_emissive.png" id="68_gate_emissive"]
+[ext_resource type="Texture2D" path="res://assets/vehicles/street_vending_machine_bank_iso8_albedo.png" id="69_vending_albedo"]
+[ext_resource type="Texture2D" path="res://assets/vehicles/street_vending_machine_bank_iso8_normal.png" id="70_vending_normal"]
+[ext_resource type="Texture2D" path="res://assets/vehicles/street_vending_machine_bank_iso8_emissive.png" id="71_vending_emissive"]
+[ext_resource type="Texture2D" path="res://assets/vehicles/rooftop_hvac_cooling_tower_iso8_albedo.png" id="72_hvac_albedo"]
+[ext_resource type="Texture2D" path="res://assets/vehicles/rooftop_hvac_cooling_tower_iso8_normal.png" id="73_hvac_normal"]
+[ext_resource type="Texture2D" path="res://assets/vehicles/rooftop_hvac_cooling_tower_iso8_emissive.png" id="74_hvac_emissive"]
+[ext_resource type="Texture2D" path="res://assets/sprites/corp_sec_guard_albedo.png" id="75_guard_albedo"]
+[ext_resource type="Texture2D" path="res://assets/normals/corp_sec_guard_normal.png" id="76_guard_normal"]
+[ext_resource type="Texture2D" path="res://assets/sprites/corp_sec_guard_emissive.png" id="77_guard_emissive"]
+[ext_resource type="Texture2D" path="res://assets/sprites/megacity_civilian_albedo.png" id="78_civ_albedo"]
+[ext_resource type="Texture2D" path="res://assets/normals/megacity_civilian_normal.png" id="79_civ_normal"]
+[ext_resource type="Texture2D" path="res://assets/sprites/megacity_civilian_emissive.png" id="80_civ_emissive"]
+[ext_resource type="Texture2D" path="res://assets/sprites/portrait_kestrel_1.png" id="81_portrait_kestrel"]
+[ext_resource type="Texture2D" path="res://assets/sprites/portrait_vex_2.png" id="82_portrait_vex"]
+[ext_resource type="Texture2D" path="res://assets/sprites/portrait_null_3.png" id="83_portrait_null"]
+[ext_resource type="Texture2D" path="res://assets/sprites/portrait_chrome_4.png" id="84_portrait_chrome"]
 
 [sub_resource type="ShaderMaterial" id="ShaderMaterial_undergrid"]
 shader = ExtResource("2_shader")
@@ -76,35 +107,71 @@ shader_parameter/stratum_cutaway_alpha = 1.0
 shader = ExtResource("2_shader")
 shader_parameter/normal_map = ExtResource("13_spire_normal")
 shader_parameter/emissive_mask = ExtResource("14_spire_emissive")
-shader_parameter/rim_strength = 1.75
-shader_parameter/bloom_strength = 1.55
-shader_parameter/background_bloom = 0.35
+shader_parameter/rim_strength = 1.85
+shader_parameter/bloom_strength = 1.6
+shader_parameter/background_bloom = 0.45
 shader_parameter/stratum_cutaway_alpha = 0.18
 
 [sub_resource type="ShaderMaterial" id="ShaderMaterial_tower"]
 shader = ExtResource("2_shader")
 shader_parameter/normal_map = ExtResource("16_tower_normal")
 shader_parameter/emissive_mask = ExtResource("17_tower_emissive")
-shader_parameter/rim_strength = 1.8
-shader_parameter/bloom_strength = 1.65
-shader_parameter/background_bloom = 0.35
+shader_parameter/rim_strength = 1.75
+shader_parameter/bloom_strength = 1.55
+shader_parameter/background_bloom = 0.3
 shader_parameter/stratum_cutaway_alpha = 1.0
 
 [sub_resource type="ShaderMaterial" id="ShaderMaterial_rubble"]
 shader = ExtResource("2_shader")
 shader_parameter/normal_map = ExtResource("19_rubble_normal")
 shader_parameter/emissive_mask = ExtResource("20_rubble_emissive")
-shader_parameter/rim_strength = 1.6
+shader_parameter/rim_strength = 1.3
 shader_parameter/bloom_strength = 1.8
-shader_parameter/background_bloom = 0.35
+shader_parameter/background_bloom = 0.2
 shader_parameter/stratum_cutaway_alpha = 1.0
 
 [sub_resource type="ShaderMaterial" id="ShaderMaterial_operative_street"]
 shader = ExtResource("2_shader")
 shader_parameter/normal_map = ExtResource("7_op_normal")
 shader_parameter/emissive_mask = ExtResource("8_op_emissive")
-shader_parameter/rim_strength = 1.85
+shader_parameter/rim_strength = 1.9
 shader_parameter/bloom_strength = 1.6
+shader_parameter/background_bloom = 0.35
+shader_parameter/stratum_cutaway_alpha = 1.0
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_operative_spire"]
+shader = ExtResource("2_shader")
+shader_parameter/normal_map = ExtResource("7_op_normal")
+shader_parameter/emissive_mask = ExtResource("8_op_emissive")
+shader_parameter/rim_strength = 1.9
+shader_parameter/bloom_strength = 1.6
+shader_parameter/background_bloom = 0.35
+shader_parameter/stratum_cutaway_alpha = 0.18
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_operative_under"]
+shader = ExtResource("2_shader")
+shader_parameter/normal_map = ExtResource("7_op_normal")
+shader_parameter/emissive_mask = ExtResource("8_op_emissive")
+shader_parameter/rim_strength = 1.9
+shader_parameter/bloom_strength = 1.6
+shader_parameter/background_bloom = 0.35
+shader_parameter/stratum_cutaway_alpha = 0.65
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_guard"]
+shader = ExtResource("2_shader")
+shader_parameter/normal_map = ExtResource("76_guard_normal")
+shader_parameter/emissive_mask = ExtResource("77_guard_emissive")
+shader_parameter/rim_strength = 1.75
+shader_parameter/bloom_strength = 1.55
+shader_parameter/background_bloom = 0.35
+shader_parameter/stratum_cutaway_alpha = 1.0
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_civ"]
+shader = ExtResource("2_shader")
+shader_parameter/normal_map = ExtResource("79_civ_normal")
+shader_parameter/emissive_mask = ExtResource("80_civ_emissive")
+shader_parameter/rim_strength = 1.65
+shader_parameter/bloom_strength = 1.5
 shader_parameter/background_bloom = 0.35
 shader_parameter/stratum_cutaway_alpha = 1.0
 
@@ -112,8 +179,8 @@ shader_parameter/stratum_cutaway_alpha = 1.0
 shader = ExtResource("2_shader")
 shader_parameter/normal_map = ExtResource("22_apc_normal")
 shader_parameter/emissive_mask = ExtResource("23_apc_emissive")
-shader_parameter/rim_strength = 1.7
-shader_parameter/bloom_strength = 1.5
+shader_parameter/rim_strength = 1.75
+shader_parameter/bloom_strength = 1.55
 shader_parameter/background_bloom = 0.35
 shader_parameter/stratum_cutaway_alpha = 1.0
 
@@ -121,8 +188,8 @@ shader_parameter/stratum_cutaway_alpha = 1.0
 shader = ExtResource("2_shader")
 shader_parameter/normal_map = ExtResource("25_turret_normal")
 shader_parameter/emissive_mask = ExtResource("26_turret_emissive")
-shader_parameter/rim_strength = 1.75
-shader_parameter/bloom_strength = 1.7
+shader_parameter/rim_strength = 1.85
+shader_parameter/bloom_strength = 1.8
 shader_parameter/background_bloom = 0.35
 shader_parameter/stratum_cutaway_alpha = 1.0
 
@@ -130,26 +197,26 @@ shader_parameter/stratum_cutaway_alpha = 1.0
 shader = ExtResource("2_shader")
 shader_parameter/normal_map = ExtResource("28_spinner_normal")
 shader_parameter/emissive_mask = ExtResource("29_spinner_emissive")
-shader_parameter/rim_strength = 1.75
-shader_parameter/bloom_strength = 1.55
-shader_parameter/background_bloom = 0.35
+shader_parameter/rim_strength = 1.85
+shader_parameter/bloom_strength = 1.65
+shader_parameter/background_bloom = 0.4
 shader_parameter/stratum_cutaway_alpha = 0.18
 
 [sub_resource type="ShaderMaterial" id="ShaderMaterial_monorail"]
 shader = ExtResource("2_shader")
 shader_parameter/normal_map = ExtResource("31_monorail_normal")
 shader_parameter/emissive_mask = ExtResource("32_monorail_emissive")
-shader_parameter/rim_strength = 1.75
-shader_parameter/bloom_strength = 1.6
-shader_parameter/background_bloom = 0.35
+shader_parameter/rim_strength = 1.8
+shader_parameter/bloom_strength = 1.65
+shader_parameter/background_bloom = 0.4
 shader_parameter/stratum_cutaway_alpha = 0.18
 
 [sub_resource type="ShaderMaterial" id="ShaderMaterial_xfmr"]
 shader = ExtResource("2_shader")
 shader_parameter/normal_map = ExtResource("34_xfmr_normal")
 shader_parameter/emissive_mask = ExtResource("35_xfmr_emissive")
-shader_parameter/rim_strength = 1.5
-shader_parameter/bloom_strength = 1.4
+shader_parameter/rim_strength = 1.65
+shader_parameter/bloom_strength = 1.75
 shader_parameter/background_bloom = 0.25
 shader_parameter/stratum_cutaway_alpha = 0.65
 
@@ -157,8 +224,8 @@ shader_parameter/stratum_cutaway_alpha = 0.65
 shader = ExtResource("2_shader")
 shader_parameter/normal_map = ExtResource("37_vat_normal")
 shader_parameter/emissive_mask = ExtResource("38_vat_emissive")
-shader_parameter/rim_strength = 1.55
-shader_parameter/bloom_strength = 1.65
+shader_parameter/rim_strength = 1.7
+shader_parameter/bloom_strength = 1.85
 shader_parameter/background_bloom = 0.25
 shader_parameter/stratum_cutaway_alpha = 0.65
 
@@ -207,19 +274,83 @@ shader_parameter/bloom_strength = 1.65
 shader_parameter/background_bloom = 0.35
 shader_parameter/stratum_cutaway_alpha = 0.18
 
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_dozer"]
+shader = ExtResource("2_shader")
+shader_parameter/normal_map = ExtResource("55_dozer_normal")
+shader_parameter/emissive_mask = ExtResource("56_dozer_emissive")
+shader_parameter/rim_strength = 1.75
+shader_parameter/bloom_strength = 1.6
+shader_parameter/background_bloom = 0.3
+shader_parameter/stratum_cutaway_alpha = 0.65
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_hauler"]
+shader = ExtResource("2_shader")
+shader_parameter/normal_map = ExtResource("58_hauler_normal")
+shader_parameter/emissive_mask = ExtResource("59_hauler_emissive")
+shader_parameter/rim_strength = 1.7
+shader_parameter/bloom_strength = 1.55
+shader_parameter/background_bloom = 0.35
+shader_parameter/stratum_cutaway_alpha = 1.0
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_decon"]
+shader = ExtResource("2_shader")
+shader_parameter/normal_map = ExtResource("61_decon_normal")
+shader_parameter/emissive_mask = ExtResource("62_decon_emissive")
+shader_parameter/rim_strength = 1.65
+shader_parameter/bloom_strength = 1.6
+shader_parameter/background_bloom = 0.25
+shader_parameter/stratum_cutaway_alpha = 0.65
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_barricade"]
+shader = ExtResource("2_shader")
+shader_parameter/normal_map = ExtResource("64_barricade_normal")
+shader_parameter/emissive_mask = ExtResource("65_barricade_emissive")
+shader_parameter/rim_strength = 1.6
+shader_parameter/bloom_strength = 1.5
+shader_parameter/background_bloom = 0.35
+shader_parameter/stratum_cutaway_alpha = 1.0
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_gate"]
+shader = ExtResource("2_shader")
+shader_parameter/normal_map = ExtResource("67_gate_normal")
+shader_parameter/emissive_mask = ExtResource("68_gate_emissive")
+shader_parameter/rim_strength = 1.75
+shader_parameter/bloom_strength = 1.7
+shader_parameter/background_bloom = 0.35
+shader_parameter/stratum_cutaway_alpha = 1.0
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_vending"]
+shader = ExtResource("2_shader")
+shader_parameter/normal_map = ExtResource("70_vending_normal")
+shader_parameter/emissive_mask = ExtResource("71_vending_emissive")
+shader_parameter/rim_strength = 1.7
+shader_parameter/bloom_strength = 1.85
+shader_parameter/background_bloom = 0.35
+shader_parameter/stratum_cutaway_alpha = 1.0
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_hvac"]
+shader = ExtResource("2_shader")
+shader_parameter/normal_map = ExtResource("73_hvac_normal")
+shader_parameter/emissive_mask = ExtResource("74_hvac_emissive")
+shader_parameter/rim_strength = 1.7
+shader_parameter/bloom_strength = 1.55
+shader_parameter/background_bloom = 0.35
+shader_parameter/stratum_cutaway_alpha = 0.18
+
 [node name="VerticalSliceSector" type="Node2D"]
 script = ExtResource("1_script")
 
+[node name="SectorFloorTiles" type="Node2D" parent="."]
+
 [node name="UnderGridCatwalk" type="Sprite2D" parent="."]
 material = SubResource("ShaderMaterial_undergrid")
-position = Vector2(320, 248)
+position = Vector2(640, 520)
 texture = ExtResource("9_under_albedo")
 metadata/stratum = 0
 
 [node name="HighVoltageTransformerBank" type="Sprite2D" parent="."]
 material = SubResource("ShaderMaterial_xfmr")
-position = Vector2(248, 252)
-scale = Vector2(0.45, 0.45)
+position = Vector2(360, 528)
 texture = ExtResource("33_xfmr_albedo")
 hframes = 8
 frame = 1
@@ -227,54 +358,98 @@ metadata/stratum = 0
 
 [node name="CryoStasisVat" type="Sprite2D" parent="."]
 material = SubResource("ShaderMaterial_vat")
-position = Vector2(392, 246)
-scale = Vector2(0.45, 0.45)
+position = Vector2(896, 516)
 texture = ExtResource("36_vat_albedo")
 hframes = 8
 frame = 0
 metadata/stratum = 0
 
+[node name="HazmatDeconRig" type="Sprite2D" parent="."]
+material = SubResource("ShaderMaterial_decon")
+position = Vector2(488, 560)
+texture = ExtResource("60_decon_albedo")
+hframes = 8
+frame = 2
+metadata/stratum = 0
+
+[node name="HeavyRiotBulldozer" type="Sprite2D" parent="."]
+material = SubResource("ShaderMaterial_dozer")
+position = Vector2(780, 556)
+texture = ExtResource("54_dozer_albedo")
+hframes = 8
+frame = 6
+metadata/stratum = 0
+
 [node name="StreetTileRoot" type="Sprite2D" parent="."]
 material = SubResource("ShaderMaterial_street")
-position = Vector2(320, 200)
+position = Vector2(640, 396)
 texture = ExtResource("3_street_albedo")
 metadata/stratum = 1
 
 [node name="BioFoundryTowerIntact" type="Sprite2D" parent="."]
 material = SubResource("ShaderMaterial_tower")
-position = Vector2(320, 168)
+position = Vector2(640, 292)
 texture = ExtResource("15_tower_albedo")
 metadata/stratum = 1
 
 [node name="BioFoundryTowerRubble" type="Sprite2D" parent="."]
 visible = false
 material = SubResource("ShaderMaterial_rubble")
-position = Vector2(320, 168)
+position = Vector2(640, 292)
 texture = ExtResource("18_rubble_albedo")
+metadata/stratum = 1
+
+[node name="AutomatedCheckpointGate" type="Sprite2D" parent="."]
+material = SubResource("ShaderMaterial_gate")
+position = Vector2(448, 344)
+texture = ExtResource("66_gate_albedo")
+hframes = 8
+frame = 1
+metadata/stratum = 1
+
+[node name="ConcreteRiotBarricade" type="Sprite2D" parent="."]
+material = SubResource("ShaderMaterial_barricade")
+position = Vector2(544, 424)
+texture = ExtResource("63_barricade_albedo")
+hframes = 8
+frame = 2
+metadata/stratum = 1
+
+[node name="StreetVendingMachineBank" type="Sprite2D" parent="."]
+material = SubResource("ShaderMaterial_vending")
+position = Vector2(776, 332)
+texture = ExtResource("69_vending_albedo")
+hframes = 8
+frame = 5
+metadata/stratum = 1
+
+[node name="CyberClinicMedPod" type="Sprite2D" parent="."]
+material = SubResource("ShaderMaterial_medpod")
+position = Vector2(842, 368)
+texture = ExtResource("45_medpod_albedo")
+hframes = 8
+frame = 1
 metadata/stratum = 1
 
 [node name="SyndicateApc" type="Sprite2D" parent="."]
 material = SubResource("ShaderMaterial_apc")
-position = Vector2(216, 208)
-scale = Vector2(0.5, 0.5)
+position = Vector2(332, 420)
 texture = ExtResource("21_apc_albedo")
 hframes = 8
 frame = 2
 metadata/stratum = 1
 
-[node name="PlasmaSentryTurret" type="Sprite2D" parent="."]
-material = SubResource("ShaderMaterial_turret")
-position = Vector2(408, 196)
-scale = Vector2(0.45, 0.45)
-texture = ExtResource("24_turret_albedo")
+[node name="AutonomousCargoHauler" type="Sprite2D" parent="."]
+material = SubResource("ShaderMaterial_hauler")
+position = Vector2(248, 368)
+texture = ExtResource("57_hauler_albedo")
 hframes = 8
-frame = 4
+frame = 3
 metadata/stratum = 1
 
 [node name="ExecutiveArmoredLimo" type="Sprite2D" parent="."]
 material = SubResource("ShaderMaterial_limo")
-position = Vector2(256, 218)
-scale = Vector2(0.5, 0.5)
+position = Vector2(476, 464)
 texture = ExtResource("39_limo_albedo")
 hframes = 8
 frame = 2
@@ -282,93 +457,185 @@ metadata/stratum = 1
 
 [node name="CorpSecurityInterceptor" type="Sprite2D" parent="."]
 material = SubResource("ShaderMaterial_interceptor")
-position = Vector2(382, 218)
-scale = Vector2(0.48, 0.48)
+position = Vector2(812, 460)
 texture = ExtResource("42_interceptor_albedo")
 hframes = 8
 frame = 6
 metadata/stratum = 1
 
-[node name="CyberClinicMedPod" type="Sprite2D" parent="."]
-material = SubResource("ShaderMaterial_medpod")
-position = Vector2(356, 172)
-scale = Vector2(0.42, 0.42)
-texture = ExtResource("45_medpod_albedo")
+[node name="PlasmaSentryTurret" type="Sprite2D" parent="."]
+material = SubResource("ShaderMaterial_turret")
+position = Vector2(932, 412)
+texture = ExtResource("24_turret_albedo")
+hframes = 8
+frame = 4
+metadata/stratum = 1
+
+[node name="CorpSecGuard1" type="Sprite2D" parent="."]
+material = SubResource("ShaderMaterial_guard")
+position = Vector2(736, 436)
+texture = ExtResource("75_guard_albedo")
+hframes = 8
+frame = 6
+metadata/stratum = 1
+
+[node name="CorpSecGuard2" type="Sprite2D" parent="."]
+material = SubResource("ShaderMaterial_guard")
+position = Vector2(516, 376)
+texture = ExtResource("75_guard_albedo")
+hframes = 8
+frame = 2
+metadata/stratum = 1
+
+[node name="MegacityCivilian1" type="Sprite2D" parent="."]
+material = SubResource("ShaderMaterial_civ")
+position = Vector2(604, 468)
+texture = ExtResource("78_civ_albedo")
+hframes = 8
+frame = 0
+metadata/stratum = 1
+
+[node name="MegacityCivilian2" type="Sprite2D" parent="."]
+material = SubResource("ShaderMaterial_civ")
+position = Vector2(868, 432)
+texture = ExtResource("78_civ_albedo")
+hframes = 8
+frame = 5
+metadata/stratum = 1
+
+[node name="OperativeVex2" type="Sprite2D" parent="."]
+material = SubResource("ShaderMaterial_operative_street")
+position = Vector2(568, 396)
+texture = ExtResource("6_op_albedo")
+hframes = 8
+frame = 2
+metadata/stratum = 1
+
+[node name="OperativeNull3" type="Sprite2D" parent="."]
+material = SubResource("ShaderMaterial_operative_street")
+position = Vector2(708, 396)
+texture = ExtResource("6_op_albedo")
+hframes = 8
+frame = 6
+metadata/stratum = 1
+
+[node name="OperativeChrome4" type="Sprite2D" parent="."]
+material = SubResource("ShaderMaterial_operative_under")
+position = Vector2(624, 516)
+texture = ExtResource("6_op_albedo")
 hframes = 8
 frame = 1
-metadata/stratum = 1
+metadata/stratum = 0
 
 [node name="SpireSkybridge" type="Sprite2D" parent="."]
 material = SubResource("ShaderMaterial_spire")
-position = Vector2(320, 136)
+position = Vector2(640, 212)
 texture = ExtResource("12_spire_albedo")
-metadata/stratum = 2
-
-[node name="SyndicateSpinner" type="Sprite2D" parent="."]
-material = SubResource("ShaderMaterial_spinner")
-position = Vector2(432, 118)
-scale = Vector2(0.5, 0.5)
-texture = ExtResource("27_spinner_albedo")
-hframes = 8
-frame = 6
 metadata/stratum = 2
 
 [node name="MonorailArmoredCar" type="Sprite2D" parent="."]
 material = SubResource("ShaderMaterial_monorail")
-position = Vector2(204, 116)
-scale = Vector2(0.55, 0.55)
+position = Vector2(348, 188)
 texture = ExtResource("30_monorail_albedo")
 hframes = 8
 frame = 2
 metadata/stratum = 2
 
-[node name="QuadHunterKillerDrone" type="Sprite2D" parent="."]
-material = SubResource("ShaderMaterial_drone")
-position = Vector2(368, 108)
-scale = Vector2(0.42, 0.42)
-texture = ExtResource("48_drone_albedo")
-hframes = 8
-frame = 3
-metadata/stratum = 2
-
 [node name="DataVaultMainframeRack" type="Sprite2D" parent="."]
 material = SubResource("ShaderMaterial_mainframe")
-position = Vector2(276, 112)
-scale = Vector2(0.42, 0.42)
+position = Vector2(512, 176)
 texture = ExtResource("51_mainframe_albedo")
 hframes = 8
 frame = 0
 metadata/stratum = 2
 
-[node name="OperativeKestrel1" type="Sprite2D" parent="."]
-material = SubResource("ShaderMaterial_spire")
-position = Vector2(320, 120)
-texture = ExtResource("6_op_albedo")
+[node name="RooftopHvacCoolingTower" type="Sprite2D" parent="."]
+material = SubResource("ShaderMaterial_hvac")
+position = Vector2(764, 172)
+texture = ExtResource("72_hvac_albedo")
+hframes = 8
+frame = 1
 metadata/stratum = 2
 
-[node name="OperativeVex2" type="Sprite2D" parent="."]
-material = SubResource("ShaderMaterial_operative_street")
-position = Vector2(296, 188)
-texture = ExtResource("6_op_albedo")
-metadata/stratum = 1
+[node name="QuadHunterKillerDrone" type="Sprite2D" parent="."]
+material = SubResource("ShaderMaterial_drone")
+position = Vector2(848, 212)
+texture = ExtResource("48_drone_albedo")
+hframes = 8
+frame = 6
+metadata/stratum = 2
 
-[node name="OperativeNull3" type="Sprite2D" parent="."]
-material = SubResource("ShaderMaterial_operative_street")
-position = Vector2(344, 188)
-texture = ExtResource("6_op_albedo")
-metadata/stratum = 1
+[node name="SyndicateSpinner" type="Sprite2D" parent="."]
+material = SubResource("ShaderMaterial_spinner")
+position = Vector2(968, 188)
+texture = ExtResource("27_spinner_albedo")
+hframes = 8
+frame = 6
+metadata/stratum = 2
 
-[node name="OperativeChrome4" type="Sprite2D" parent="."]
-material = SubResource("ShaderMaterial_undergrid")
-position = Vector2(320, 232)
+[node name="OperativeKestrel1" type="Sprite2D" parent="."]
+material = SubResource("ShaderMaterial_operative_spire")
+position = Vector2(640, 196)
 texture = ExtResource("6_op_albedo")
-metadata/stratum = 0
+hframes = 8
+frame = 0
+metadata/stratum = 2
 
 [node name="TacticalHud" type="CanvasLayer" parent="."]
 
-[node name="HudTelemetryLabel" type="Label" parent="TacticalHud"]
-offset_left = 12.0
+[node name="TopBarBg" type="ColorRect" parent="TacticalHud"]
+offset_left = 8.0
 offset_top = 8.0
-offset_right = 628.0
-offset_bottom = 32.0
+offset_right = 1272.0
+offset_bottom = 42.0
+color = Color(0.04, 0.06, 0.1, 0.88)
+
+[node name="HudTelemetryLabel" type="Label" parent="TacticalHud"]
+offset_left = 18.0
+offset_top = 13.0
+offset_right = 1262.0
+offset_bottom = 38.0
+theme_override_colors/font_color = Color(0.28, 0.95, 1, 1)
+theme_override_font_sizes/font_size = 15
 text = "CR: 6000 | STRATUM: STREET | BIO-FOUNDRY: INTACT | NOMINAL 1.00x"
+
+[node name="OperativeCardBg" type="ColorRect" parent="TacticalHud"]
+offset_left = 12.0
+offset_top = 564.0
+offset_right = 468.0
+offset_bottom = 708.0
+color = Color(0.04, 0.06, 0.1, 0.9)
+
+[node name="PortraitRect" type="TextureRect" parent="TacticalHud"]
+offset_left = 24.0
+offset_top = 580.0
+offset_right = 120.0
+offset_bottom = 676.0
+texture = ExtResource("81_portrait_kestrel")
+expand_mode = 1
+stretch_mode = 5
+
+[node name="OperativeBioLabel" type="Label" parent="TacticalHud"]
+offset_left = 134.0
+offset_top = 574.0
+offset_right = 456.0
+offset_bottom = 700.0
+theme_override_colors/font_color = Color(0.86, 0.94, 0.98, 1)
+theme_override_font_sizes/font_size = 13
+text = "OP-1: KESTREL-1 [SPIRE]\nORGANS: V3 EYES | V3 BRAIN | V2 LEGS\nBIOCHEM I/P/A: 82% / 78% / 65%\nWEAPON: GAUSS CARBINE | THRALLS: 0"
+
+[node name="ObjectivesBg" type="ColorRect" parent="TacticalHud"]
+offset_left = 812.0
+offset_top = 548.0
+offset_right = 1268.0
+offset_bottom = 708.0
+color = Color(0.04, 0.06, 0.1, 0.9)
+
+[node name="ObjectivesLabel" type="Label" parent="TacticalHud"]
+offset_left = 824.0
+offset_top = 556.0
+offset_right = 1258.0
+offset_bottom = 702.0
+theme_override_colors/font_color = Color(0.75, 0.92, 0.88, 1)
+theme_override_font_sizes/font_size = 12
+text = "KOWLOON SECTOR OBJECTIVES:\n[ ] SHEAR BIO-FOUNDRY PILLARS (C / FIRE)\n[ ] SABOTAGE SUB-GRID TRANSFORMER (T)\n[ ] AMBUSH ZAIBATSU LIMO CONVOY (V)\n[ ] LOOT DERAILED MONORAIL VAULT (M)\n[ ] PERSUADERTRON CROWD SURGE (P)\nKBM: LMB Move | RMB/F Fire | Tab Op | 1-3 Stratum | Space 0.25x\nSTEAM PAD: L-Stick Move | X Fire | Y Persuade | LB/RB Op | D-Pad Stratum"

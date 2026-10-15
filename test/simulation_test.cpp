@@ -355,6 +355,37 @@ void test_subgrid_transformer_sabotage_and_executive_convoy_ambush() {
           "Executive Convoy ambush awards +1500 bearer bonds and salvage");
 }
 
+void test_full_ops_tactical_sweep() {
+  auto sim = wetware::create_default_vertical_slice();
+  const wetware::Credits initial_credits = sim.find_syndicate(1)->treasury;
+
+  require(sim.apply_command(wetware::CommandSabotageTransformer{
+              .syndicate_id = 1, .operative_index = 3, .district_id = 1}),
+          "Sabotage District 1 UnderGrid transformer");
+  require(sim.apply_command(wetware::CommandInterceptExecutiveConvoy{
+              .syndicate_id = 1, .operative_index = 1, .district_id = 1}),
+          "Intercept District 1 Street executive convoy");
+  require(sim.apply_command(
+              wetware::CommandShearColumns{.building_id = 21,
+                                           .stratum = wetware::Stratum::Street,
+                                           .columns_destroyed = 4}),
+          "Shear Monorail Hub columns");
+  require(sim.apply_command(wetware::CommandLootMonorailWreck{
+              .syndicate_id = 1, .operative_index = 2, .district_id = 3}),
+          "Loot Monorail wreck on Street");
+  sim.step_tick();
+
+  const auto* d1 = sim.find_district(1);
+  const auto* p1 = sim.find_syndicate(1);
+  require(d1 != nullptr && p1 != nullptr, "District 1 and Player exist");
+  require(d1->power_blackout && !d1->transformer_intact &&
+              !d1->executive_convoy_active,
+          "District 1 reflects blackout and intercepted convoy");
+  require(p1->treasury > initial_credits + 3500 &&
+              p1->cryo_vault_salvage.size() >= 2,
+          "Combined Convoy + Monorail sweep credits and salvage recorded");
+}
+
 } // namespace
 
 int main() {
@@ -367,6 +398,7 @@ int main() {
   test_ordinance_strike_and_corpse_wetware_extraction();
   test_thrall_directives_and_monorail_wreck_loot();
   test_subgrid_transformer_sabotage_and_executive_convoy_ambush();
+  test_full_ops_tactical_sweep();
   std::cout << "All wetware C++23 simulation tests passed.\n";
   return 0;
 }
