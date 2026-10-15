@@ -37,6 +37,36 @@ int main(int argc, char** argv) {
         .syndicate_id = 1,
         .active = true,
     });
+  } else if (scenario == "full_ops") {
+    sim.apply_command(wetware::CommandTriggerOverclock{
+        .syndicate_id = 1,
+        .active = true,
+    });
+    sim.apply_command(wetware::CommandSabotageTransformer{
+        .syndicate_id = 1,
+        .operative_index = 3,
+        .district_id = 1,
+    });
+    sim.apply_command(wetware::CommandInterceptExecutiveConvoy{
+        .syndicate_id = 1,
+        .operative_index = 1,
+        .district_id = 1,
+    });
+    sim.apply_command(wetware::CommandShearColumns{
+        .building_id = 10,
+        .stratum = wetware::Stratum::Street,
+        .columns_destroyed = 4,
+    });
+    sim.apply_command(wetware::CommandShearColumns{
+        .building_id = 21,
+        .stratum = wetware::Stratum::Street,
+        .columns_destroyed = 4,
+    });
+    sim.apply_command(wetware::CommandLootMonorailWreck{
+        .syndicate_id = 1,
+        .operative_index = 2,
+        .district_id = 3,
+    });
   }
 
   sim.step_tick();

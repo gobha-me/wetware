@@ -54,12 +54,32 @@ func _initialize() -> void:
 		quit(1)
 		return
 
-	for vehicle_node_name in ["SyndicateApc", "PlasmaSentryTurret", "SyndicateSpinner", "MonorailArmoredCar", "HighVoltageTransformerBank", "CryoStasisVat", "ExecutiveArmoredLimo", "CorpSecurityInterceptor", "CyberClinicMedPod", "QuadHunterKillerDrone", "DataVaultMainframeRack"]:
+	var all_18_vehicles := [
+		"SyndicateApc", "PlasmaSentryTurret", "SyndicateSpinner", "MonorailArmoredCar",
+		"HighVoltageTransformerBank", "CryoStasisVat", "ExecutiveArmoredLimo", "CorpSecurityInterceptor",
+		"CyberClinicMedPod", "QuadHunterKillerDrone", "DataVaultMainframeRack", "HeavyRiotBulldozer",
+		"AutonomousCargoHauler", "HazmatDeconRig", "ConcreteRiotBarricade", "AutomatedCheckpointGate",
+		"StreetVendingMachineBank", "RooftopHvacCoolingTower",
+	]
+	for vehicle_node_name in all_18_vehicles:
 		var vnode := sector.get_node_or_null(vehicle_node_name) as Sprite2D
-		if vnode == null or vnode.hframes != 8 or vnode.texture == null:
-			push_error("Missing or misconfigured 8-directional isometric vehicle/turret node: %s" % vehicle_node_name)
+		if vnode == null or vnode.hframes != 8 or vnode.texture == null or vnode.scale != Vector2.ONE:
+			push_error("Missing or non-native-scale 8-directional isometric vehicle/prop node: %s" % vehicle_node_name)
 			quit(1)
 			return
+
+	for actor_node_name in ["OperativeKestrel1", "OperativeVex2", "OperativeNull3", "OperativeChrome4", "CorpSecGuard1", "CorpSecGuard2", "MegacityCivilian1", "MegacityCivilian2"]:
+		var anode := sector.get_node_or_null(actor_node_name) as Sprite2D
+		if anode == null or anode.hframes != 8 or anode.texture == null:
+			push_error("Missing or misconfigured 8-directional character sprite node: %s" % actor_node_name)
+			quit(1)
+			return
+
+	var portrait_rect := sector.get_node_or_null("TacticalHud/PortraitRect") as TextureRect
+	if portrait_rect == null or portrait_rect.texture == null:
+		push_error("Missing Venice operative portrait in TacticalHud")
+		quit(1)
+		return
 
 	# Reject malformed / adversarial snapshots
 	var bad_cases: Array = [
