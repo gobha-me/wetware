@@ -21,14 +21,16 @@ void fragment() {
 	vec3 normal = normalize(n_sample);
 	vec3 l_dir = normalize(light_direction);
 
-	float ndotl = max(dot(normal, l_dir), 0.18) * blackout_factor;
-	float rim = pow(1.0 - max(normal.z, 0.0), 1.8) * max(dot(normal.xy, l_dir.xy), 0.0) * rim_strength;
+	float hemi = clamp(dot(normal, l_dir) * 0.5 + 0.5, 0.0, 1.0);
+	float ndotl = mix(0.72, 1.18, hemi) * blackout_factor;
+	float rim = pow(1.0 - max(normal.z, 0.0), 2.5) * max(dot(normal.xy, l_dir.xy), 0.0) * (rim_strength * 0.14);
 
 	vec4 emissive = texture(emissive_mask, UV);
 	// Foreground silhouettes occlude background bloom so dark trenchcoats read cleanly against neon rain.
 	float occluded_bg_bloom = background_bloom * (1.0 - fg.a);
 
-	vec3 dynamic_pulse = pulse_tint * pulse_intensity * (0.35 + 0.65 * pow(1.0 - max(normal.z, 0.0), 1.5));
-	vec3 lit_rgb = fg.rgb * ndotl + light_color.rgb * rim * (0.4 + 0.6 * blackout_factor) + emissive.rgb * bloom_strength + dynamic_pulse + vec3(occluded_bg_bloom * 0.15 * blackout_factor);
+	vec3 dynamic_pulse = pulse_tint * pulse_intensity * (0.25 + 0.45 * pow(1.0 - max(normal.z, 0.0), 1.8));
+	vec3 glow = emissive.rgb * emissive.a * (bloom_strength * 0.55);
+	vec3 lit_rgb = fg.rgb * ndotl + light_color.rgb * rim * (0.35 + 0.65 * blackout_factor) + glow + dynamic_pulse + vec3(occluded_bg_bloom * 0.03 * blackout_factor);
 	COLOR = vec4(lit_rgb, fg.a * stratum_cutaway_alpha);
 }

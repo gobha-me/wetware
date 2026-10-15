@@ -1,5 +1,5 @@
 {
-  "generator": "venice-sd35 + 32-color Bayer pixel quantizer + wetware 2.5D Sobel pipeline",
+  "generator": "venice-sd35 + venice bg-remove + wetware 2.5D Sobel normal/emissive pipeline",
   "portraits": [
     {
       "id": "portrait_kestrel_1",
@@ -71,6 +71,98 @@
         "seed": 95766207,
         "steps": 20,
         "width": 1024
+      }
+    }
+  ],
+  "isometric_sprites_and_structures": [
+    {
+      "id": "biofoundry_tower_intact",
+      "outputs": [
+        "../tiles/biofoundry_tower_intact_albedo.png",
+        "../tiles/biofoundry_tower_intact_emissive.png",
+        "../normals/biofoundry_tower_intact_normal.png"
+      ],
+      "dimensions": "256x288 (24/32-bit isometric pixel art + 2.5D Sobel normal + emissive mask)",
+      "venice_metadata": {
+        "model": "venice-sd35",
+        "seed": 9101,
+        "width": 1024,
+        "height": 1024,
+        "safe_mode": false,
+        "hide_watermark": true,
+        "prompt": "2:1 isometric game building asset, brutalist cyberpunk corporate Bio-Foundry tower megastructure, dark reinforced ferro-concrete pillars with yellow-black hazard stripes at base, glowing emerald-green cryo-stasis vat bay windows, rooftop helipad and industrial cooling vents, gritty 1990s Syndicate Wars 32-bit pixel art style, isolated single building centered on solid flat magenta background, crisp edges, no ground plane outside building footprint"
+      }
+    },
+    {
+      "id": "biofoundry_tower_rubble",
+      "outputs": [
+        "../tiles/biofoundry_tower_rubble_albedo.png",
+        "../tiles/biofoundry_tower_rubble_emissive.png",
+        "../normals/biofoundry_tower_rubble_normal.png"
+      ],
+      "dimensions": "256x288 (24/32-bit isometric pixel art + 2.5D Sobel normal + emissive mask)",
+      "venice_metadata": {
+        "model": "venice-sd35",
+        "seed": 9102,
+        "width": 1024,
+        "height": 1024,
+        "safe_mode": false,
+        "hide_watermark": true,
+        "prompt": "2:1 isometric game building ruin asset, collapsed destroyed cyberpunk corporate Bio-Foundry tower rubble crater, shattered ferro-concrete corner pillar stumps with twisted rebar, ruptured glowing emerald-green bio-fluid crater lake in center, orange molten plasma slag cracks in concrete debris mound, gritty 1990s Syndicate Wars 32-bit pixel art style, isolated single ruin centered on solid flat magenta background, crisp edges"
+      }
+    },
+    {
+      "id": "operative_trenchcoat",
+      "outputs": [
+        "operative_trenchcoat_albedo.png",
+        "operative_trenchcoat_emissive.png",
+        "../normals/operative_trenchcoat_normal.png"
+      ],
+      "dimensions": "512x96 (8 frames @ 64x96 24/32-bit pixel art + 2.5D Sobel normal + emissive mask)",
+      "venice_metadata": {
+        "model": "venice-sd35",
+        "seed": 9201,
+        "width": 1024,
+        "height": 1024,
+        "safe_mode": false,
+        "hide_watermark": true,
+        "prompt": "2:1 isometric 32-bit pixel art game character sprite, full body cyberpunk syndicate operative wearing long dark black leather trenchcoat, glowing crimson cybernetic visor sunglasses, chrome bionic arm holding heavy Gauss rifle, 1993 Bullfrog Syndicate game style, single isolated character standing centered on solid flat magenta background, crisp pixel edges"
+      }
+    },
+    {
+      "id": "corp_sec_guard",
+      "outputs": [
+        "corp_sec_guard_albedo.png",
+        "corp_sec_guard_emissive.png",
+        "../normals/corp_sec_guard_normal.png"
+      ],
+      "dimensions": "512x96 (8 frames @ 64x96 24/32-bit pixel art + 2.5D Sobel normal + emissive mask)",
+      "venice_metadata": {
+        "model": "venice-sd35",
+        "seed": 9202,
+        "width": 1024,
+        "height": 1024,
+        "safe_mode": false,
+        "hide_watermark": true,
+        "prompt": "2:1 isometric 32-bit pixel art game character sprite, full body cyberpunk Zaibatsu corporate security guard in dark gunmetal and yellow-amber hazard armored carapace suit, glowing amber visor helmet, holding heavy pulse carbine rifle, 1996 Syndicate Wars game style, single isolated character standing centered on solid flat magenta background, crisp pixel edges"
+      }
+    },
+    {
+      "id": "megacity_civilian",
+      "outputs": [
+        "megacity_civilian_albedo.png",
+        "megacity_civilian_emissive.png",
+        "../normals/megacity_civilian_normal.png"
+      ],
+      "dimensions": "512x96 (8 frames @ 64x96 24/32-bit pixel art + 2.5D Sobel normal + emissive mask)",
+      "venice_metadata": {
+        "model": "venice-sd35",
+        "seed": 9203,
+        "width": 1024,
+        "height": 1024,
+        "safe_mode": false,
+        "hide_watermark": true,
+        "prompt": "2:1 isometric 32-bit pixel art game character sprite, full body cyberpunk Kowloon megacity street civilian wearing dark slate rain-slicked techwear hooded jacket and cargo pants with subtle cyan data-jack collar, 1996 Syndicate Wars game style, single isolated character standing centered on solid flat magenta background, crisp pixel edges"
       }
     }
   ]
