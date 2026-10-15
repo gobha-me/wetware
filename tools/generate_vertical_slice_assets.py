@@ -455,86 +455,332 @@ def process_venice_building(
     return albedo, emissive
 
 
+def extract_base_character_from_sheet_or_nobg(
+    nobg_path: Path | None,
+    existing_albedo_path: Path,
+) -> tuple[int, int, list[RGBA]]:
+    if nobg_path is not None and nobg_path.exists():
+        sw, sh, raw_px = read_rgba_png(nobg_path)
+        cleaned_px = [clean_magenta_spill(r, g, b, a) for (r, g, b, a) in raw_px]
+        return crop_and_resize_nearest(sw, sh, cleaned_px, 54, 76)
+
+    # Extract Frame 0 character body (rows y=4..79, cols x=0..63) from existing sheet
+    sw, sh, raw_px = read_rgba_png(existing_albedo_path)
+    sub_w, sub_h = 64, 77
+    sub_px: list[RGBA] = [(0, 0, 0, 0)] * (sub_w * sub_h)
+    for y in range(sub_h):
+        for x in range(sub_w):
+            sub_px[y * sub_w + x] = raw_px[y * sw + x]
+    return crop_and_resize_nearest(sub_w, sub_h, sub_px, 54, 76)
+
+
 def process_venice_character_sheet(
-    nobg_path: Path,
+    nobg_path: Path | None,
+    existing_albedo_path: Path,
     archetype: str,
 ) -> tuple[int, int, list[RGBA], list[RGBA]]:
+    """Generates a 512x384 (hframes=8 directions x vframes=4 animation rows @ 64x96) sheet.
+    Row 0: Idle / Ready Stance
+    Row 1: Walk/Sprint Stride Phase A (Left Boot Forward/Up, Right Boot Back, Coat Sweep +)
+    Row 2: Walk/Sprint Stride Phase B (Right Boot Forward/Up, Left Boot Back, Coat Sweep -)
+    Row 3: Braced Combat Fire + Muzzle Flash (or Panic Sprint for Civilians)
+    """
     fw, fh = 64, 96
-    frames = 8
-    w, h = fw * frames, fh
+    hframes, vframes = 8, 4
+    w, h = fw * hframes, fh * vframes
 
-    sw, sh, raw_px = read_rgba_png(nobg_path)
-    cleaned_px = [clean_magenta_spill(r, g, b, a) for (r, g, b, a) in raw_px]
-    base_w, base_h, base_px = crop_and_resize_nearest(sw, sh, cleaned_px, fw - 10, 76)
+    base_w, base_h, base_px = extract_base_character_from_sheet_or_nobg(nobg_path, existing_albedo_path)
 
     sheet_albedo: list[RGBA] = [(0, 0, 0, 0)] * (w * h)
     sheet_emissive: list[RGBA] = [(0, 0, 0, 0)] * (w * h)
 
     dir_configs = [
-        (False, 1.00, 1.00),   # 0: S
-        (False, 0.94, 0.98),   # 1: SE
-        (False, 0.88, 0.95),   # 2: E
-        (False, 0.92, 0.88),   # 3: NE
-        (True,  0.96, 0.82),   # 4: N
-        (True,  0.92, 0.88),   # 5: NW
-        (True,  0.88, 0.95),   # 6: W
-        (True,  0.94, 0.98),   # 7: SW
+        (False, 1.00, 1.00,  0,  1),   # 0: S
+        (False, 0.94, 0.98,  1,  1),   # 1: SE
+        (False, 0.88, 0.95,  1,  0),   # 2: E
+        (False, 0.92, 0.88,  1, -1),   # 3: NE
+        (True,  0.96, 0.82,  0, -1),   # 4: N
+        (True,  0.92, 0.88, -1, -1),   # 5: NW
+        (True,  0.88, 0.95, -1,  0),   # 6: W
+        (True,  0.94, 0.98, -1,  1),   # 7: SW
     ]
 
-    for frame_idx, (flip_x, width_scale, shade_mul) in enumerate(dir_configs):
-        ox = frame_idx * fw
-        cw = max(1, int(round(base_w * width_scale)))
-        ch = base_h
+    for row_idx in range(vframes):
+        oy = row_idx * fh
+        for frame_idx, (flip_x, width_scale, shade_mul, dir_x, dir_y) in enumerate(dir_configs):
+            ox = frame_idx * fw
+            cw = max(1, int(round(base_w * width_scale)))
+            ch = base_h
 
-        for y in range(78, 93):
-            for x in range(8, 56):
-                sd = ((x - 31.5) / 16.0) ** 2 + ((y - 86.0) / 5.0) ** 2
-                if sd <= 1.0:
-                    idx = y * w + (ox + x)
-                    if 0.78 <= sd <= 1.0:
-                        if archetype == "operative":
-                            sheet_albedo[idx] = (36, 210, 235, 195)
-                            sheet_emissive[idx] = (36, 210, 235, 120)
-                        elif archetype == "guard":
-                            sheet_albedo[idx] = (235, 145, 32, 185)
-                            sheet_emissive[idx] = (235, 145, 32, 110)
+            # Ground contact shadow + subtle tactical foot ring
+            for y in range(78, 93):
+                for x in range(8, 56):
+                    sd = ((x - 31.5) / 16.0) ** 2 + ((y - 86.0) / 5.0) ** 2
+                    if sd <= 1.0:
+                        idx = (oy + y) * w + (ox + x)
+                        if 0.78 <= sd <= 1.0:
+                            if archetype.startswith("operative"):
+                                sheet_albedo[idx] = (36, 210, 235, 195)
+                                sheet_emissive[idx] = (36, 210, 235, 120)
+                            elif archetype == "guard":
+                                sheet_albedo[idx] = (235, 145, 32, 185)
+                                sheet_emissive[idx] = (235, 145, 32, 110)
+                            else:
+                                sheet_albedo[idx] = (90, 155, 195, 125)
                         else:
-                            sheet_albedo[idx] = (90, 155, 195, 140)
+                            sheet_albedo[idx] = (6, 8, 12, 180)
+
+            px_x0 = (fw - cw) // 2
+            px_y0 = 88 - ch
+
+            # Hole-free inverse mapping over destination cell (tx, ty)
+            for ty in range(max(0, px_y0 - 4), min(fh, px_y0 + ch + 4)):
+                py = ty - px_y0
+                y_norm = max(0.0, min(1.0, py / float(max(1, ch - 1))))
+                for tx in range(max(0, px_x0 - 6), min(fw, px_x0 + cw + 6)):
+                    px = tx - px_x0
+                    x_norm = (px / float(max(1, cw - 1))) - 0.5  # -0.5 (left) .. +0.5 (right)
+
+                    # Compute smooth inverse anatomical offset (off_x, off_y)
+                    off_x = 0.0
+                    off_y = 0.0
+                    if row_idx == 1:  # Stride Phase A (Left boot lifted & forward, right boot planted)
+                        off_y = 2.0  # Torso stride bob
+                        off_x = float(dir_x) * (1.0 - y_norm * 0.5)
+                        if 0.42 <= y_norm <= 0.78:
+                            # Coat / jacket hem wind sweep
+                            off_x += 2.2 * math.sin((y_norm - 0.42) / 0.36 * math.pi)
+                        if y_norm > 0.54:
+                            leg_t = (y_norm - 0.54) / 0.46
+                            if x_norm < -0.02:
+                                off_y -= 4.5 * leg_t  # Left boot lifts up
+                                off_x -= 2.0 * leg_t
+                            elif x_norm > 0.02:
+                                off_y += 1.0 * leg_t  # Right boot planted
+                                off_x += 1.5 * leg_t
+                    elif row_idx == 2:  # Stride Phase B (Right boot lifted & forward, left boot planted)
+                        off_y = 2.0
+                        off_x = float(dir_x) * (1.0 - y_norm * 0.5)
+                        if 0.42 <= y_norm <= 0.78:
+                            off_x -= 2.2 * math.sin((y_norm - 0.42) / 0.36 * math.pi)
+                        if y_norm > 0.54:
+                            leg_t = (y_norm - 0.54) / 0.46
+                            if x_norm > 0.02:
+                                off_y -= 4.5 * leg_t  # Right boot lifts up
+                                off_x += 2.0 * leg_t
+                            elif x_norm < -0.02:
+                                off_y += 1.0 * leg_t  # Left boot planted
+                                off_x -= 1.5 * leg_t
+                    elif row_idx == 3:  # Braced Combat Fire / Panic Sprint Crouch
+                        off_y = 3.5 * (1.0 - y_norm * 0.65)
+                        off_x = float(dir_x) * 1.8 * (1.0 - y_norm * 0.5)
+                        if y_norm > 0.55:
+                            leg_t = (y_norm - 0.55) / 0.45
+                            off_x += (2.2 if x_norm > 0.0 else -2.2) * leg_t
+
+                    src_px = px - off_x
+                    src_py = int(round(py - off_y))
+                    if not (0 <= src_py < ch and 0.0 <= src_px < cw):
+                        continue
+                    src_x = min(base_w - 1, max(0, int(src_px / width_scale)))
+                    if flip_x:
+                        src_x = (base_w - 1) - src_x
+                    r, g, b, a = base_px[src_py * base_w + src_x]
+                    if a < 64:
+                        continue
+
+                    idx = (oy + ty) * w + (ox + tx)
+                    sr = clamp8(r * shade_mul)
+                    sg = clamp8(g * shade_mul)
+                    sb = clamp8(b * shade_mul)
+                    sheet_albedo[idx] = (sr, sg, sb, 255)
+
+                    if archetype.startswith("operative") and (
+                        (r > 175 and (r - g) > 65) or (b > 195 and (b - r) > 55)
+                    ):
+                        sheet_emissive[idx] = (r, g, b, 235)
+                    elif archetype == "guard" and r > 190 and g > 110 and b < 90:
+                        sheet_emissive[idx] = (r, g, b, 225)
+                    elif archetype.startswith("civilian") and b > 185 and g > 140 and (b - r) > 60:
+                        sheet_emissive[idx] = (r, g, b, 190)
                     else:
-                        sheet_albedo[idx] = (6, 8, 12, 175)
+                        sheet_emissive[idx] = (0, 0, 0, 0)
 
-        px_x0 = (fw - cw) // 2
-        px_y0 = 88 - ch
-
-        for py in range(ch):
-            for px in range(cw):
-                src_x = min(base_w - 1, int(px / width_scale))
-                if flip_x:
-                    src_x = (base_w - 1) - src_x
-                r, g, b, a = base_px[py * base_w + src_x]
-                if a < 64:
-                    continue
-                tx = px_x0 + px
-                ty = px_y0 + py
-                if not (0 <= tx < fw and 0 <= ty < fh):
-                    continue
-                idx = ty * w + (ox + tx)
-
-                sr = clamp8(r * shade_mul)
-                sg = clamp8(g * shade_mul)
-                sb = clamp8(b * shade_mul)
-                sheet_albedo[idx] = (sr, sg, sb, 255)
-
-                if archetype == "operative" and r > 175 and (r - g) > 65:
-                    sheet_emissive[idx] = (r, g, b, 230)
-                elif archetype == "guard" and r > 190 and g > 110 and b < 90:
-                    sheet_emissive[idx] = (r, g, b, 220)
-                elif archetype == "civilian" and b > 185 and g > 140 and (b - r) > 60:
-                    sheet_emissive[idx] = (r, g, b, 210)
-                else:
-                    sheet_emissive[idx] = (0, 0, 0, 0)
+            # Row 3 Muzzle Flash Star for Operatives & Guards
+            if row_idx == 3 and (archetype.startswith("operative") or archetype == "guard"):
+                flash_cx = 32 + dir_x * 16
+                flash_cy = 48 + dir_y * 6
+                is_cyan = archetype == "operative_female"
+                for fy in range(-6, 7):
+                    for fx in range(-6, 7):
+                        tx = flash_cx + fx
+                        ty = flash_cy + fy
+                        if not (0 <= tx < fw and 0 <= ty < fh):
+                            continue
+                        dist = math.hypot(fx, fy)
+                        on_spike = (abs(fx) <= 1 and abs(fy) <= 6) or (abs(fy) <= 1 and abs(fx) <= 6)
+                        if dist <= 2.4:
+                            idx = (oy + ty) * w + (ox + tx)
+                            sheet_albedo[idx] = (255, 250, 220, 255)
+                            sheet_emissive[idx] = (255, 250, 220, 255)
+                        elif dist <= 4.5 or on_spike:
+                            idx = (oy + ty) * w + (ox + tx)
+                            fc = (65, 235, 255, 245) if is_cyan else (255, 175, 48, 245)
+                            sheet_albedo[idx] = fc
+                            sheet_emissive[idx] = fc
 
     return w, h, sheet_albedo, sheet_emissive
+
+
+def generate_isometric_tenement_block(facade_path: Path) -> tuple[int, int, list[RGBA], list[RGBA]]:
+    """Projects the 32-bit Kowloon tenement facade onto a locked 2:1 isometric prism (256x256)."""
+    w, h = 256, 256
+    albedo: list[RGBA] = [(0, 0, 0, 0)] * (w * h)
+    emissive: list[RGBA] = [(0, 0, 0, 0)] * (w * h)
+
+    sw, sh, raw_px = read_rgba_png(facade_path)
+    cleaned_px = [clean_magenta_spill(r, g, b, a) for (r, g, b, a) in raw_px]
+    fw, fh, fac_px = crop_and_resize_nearest(sw, sh, cleaned_px, 224, 140)
+
+    # Isometric footprint centered at (128, 196), half-width=104, half-depth=52, wall_h=126
+    cx, cy = 128, 242
+    hw, hd = 104, 52
+    wall_h = 128
+
+    # 1. Left Isometric Wall (x in cx-hw .. cx) & Right Isometric Wall (x in cx .. cx+hw)
+    for x in range(cx - hw, cx + hw):
+        if x < cx:
+            t = (x - (cx - hw)) / float(hw)  # 0..1 along SW wall
+            y_bot = int(round((cy - hd) + t * hd))
+            shade = 0.96
+            src_x = min(fw - 1, int(t * (fw * 0.52)))
+        else:
+            t = (x - cx) / float(hw)  # 0..1 along SE wall
+            y_bot = int(round(cy - t * hd))
+            shade = 0.72
+            src_x = min(fw - 1, int((0.48 + t * 0.52) * (fw - 1)))
+
+        y_top = y_bot - wall_h
+        for y in range(max(0, y_top), min(h, y_bot)):
+            vt = (y - y_top) / float(wall_h)
+            src_y = min(fh - 1, max(0, int(vt * (fh - 1))))
+            r, g, b, a = fac_px[src_y * fw + src_x]
+            if a < 80:
+                r, g, b = 32, 40, 48
+            idx = y * w + x
+            sr = clamp8(r * shade)
+            sg = clamp8(g * shade)
+            sb = clamp8(b * shade)
+            # Corner pillar bevel at x == cx
+            if abs(x - cx) <= 2:
+                sr, sg, sb = clamp8(sr * 1.22), clamp8(sg * 1.22), clamp8(sb * 1.22)
+            albedo[idx] = (sr, sg, sb, 255)
+
+            # Warm amber apartment windows & red neon Kanji signage emissive mask
+            is_warm_win = (r > 195 and g > 120 and (r - b) > 75)
+            is_red_sign = (r > 185 and (r - g) > 70 and g < 110)
+            if is_warm_win or is_red_sign:
+                emissive[idx] = (r, g, b, 225)
+
+    # 2. 2:1 Isometric Roof Diamond centered at (cx, cy - hd - wall_h) = (128, 62)
+    rcx, rcy = cx, cy - hd - wall_h
+    for y in range(max(0, rcy - hd - 4), min(h, rcy + hd + 4)):
+        for x in range(max(0, rcx - hw - 4), min(w, rcx + hw + 4)):
+            dx = (x - rcx) / float(hw)
+            dy = (y - rcy) / float(hd)
+            md = abs(dx) + abs(dy)
+            if md <= 1.0:
+                idx = y * w + x
+                if md >= 0.90:
+                    # Raised concrete roof parapet
+                    albedo[idx] = (54, 64, 76, 255)
+                else:
+                    # Tar-gravel rooftop with grid seams
+                    u = dx + dy
+                    v = dy - dx
+                    seam = abs((u * 4.0) - round(u * 4.0)) < 0.06 or abs((v * 4.0) - round(v * 4.0)) < 0.06
+                    base_c = 28 if seam else 36
+                    albedo[idx] = (base_c, base_c + 6, base_c + 14, 255)
+
+    # 3. Rooftop HVAC Cooling Units & Warning Beacons on Roof
+    for hx, hy in ((102, 54), (126, 46), (148, 58), (118, 70)):
+        for y in range(hy - 8, hy + 8):
+            for x in range(hx - 11, hx + 11):
+                if 0 <= x < w and 0 <= y < h:
+                    idx = y * w + x
+                    if y < hy - 3:
+                        albedo[idx] = (68, 78, 90, 255)
+                    else:
+                        dist = math.hypot(x - hx, (y - hy) * 1.4)
+                        if dist < 5.2:
+                            albedo[idx] = (20, 26, 34, 255)
+                        else:
+                            albedo[idx] = (52, 62, 74, 255)
+    # Red rooftop aviation warning beacons
+    for bx, by in ((128, 12), (32, 62), (224, 62)):
+        for y in range(by - 2, by + 3):
+            for x in range(bx - 2, bx + 3):
+                if 0 <= x < w and 0 <= y < h:
+                    idx = y * w + x
+                    albedo[idx] = (255, 58, 48, 255)
+                    emissive[idx] = (255, 58, 48, 240)
+
+    return w, h, albedo, emissive
+
+
+def generate_isometric_corp_block(src_path: Path) -> tuple[int, int, list[RGBA], list[RGBA]]:
+    """Crops the upper isometric tower from city_corp_nobg.png and trims its base to a 2:1 isometric diamond."""
+    w, h = 256, 256
+    sw, sh, raw_px = read_rgba_png(src_path)
+    crop_h = int(sh * 0.80)
+    trimmed: list[RGBA] = [(0, 0, 0, 0)] * (sw * crop_h)
+    for y in range(crop_h):
+        for x in range(int(sw * 0.21), int(sw * 0.79)):
+            r, g, b, a = clean_magenta_spill(*raw_px[y * sw + x])
+            trimmed[y * sw + x] = (r, g, b, a)
+
+    cw, ch, c_px = crop_and_resize_nearest(sw, crop_h, trimmed, 204, 236)
+    albedo: list[RGBA] = [(0, 0, 0, 0)] * (w * h)
+    emissive: list[RGBA] = [(0, 0, 0, 0)] * (w * h)
+
+    x0 = (w - cw) // 2
+    y0 = 244 - ch
+    cx, cy = 128, 242
+    for y in range(ch):
+        ty = y0 + y
+        for x in range(cw):
+            tx = x0 + x
+            # Clip bottom edge along 2:1 isometric V-curb (y_bot = cy - abs(tx - cx) * 0.5)
+            y_bot = int(round(cy - abs(tx - cx) * 0.5))
+            if ty > y_bot:
+                continue
+            r, g, b, a = c_px[y * cw + x]
+            if a < 64:
+                continue
+            idx = ty * w + tx
+            if ty >= y_bot - 3:
+                # Reinforced concrete street plinth at base of tower
+                albedo[idx] = (46, 56, 68, 255)
+            else:
+                albedo[idx] = (r, g, b, 255)
+                if b > 185 and g > 150 and (b - r) > 55:
+                    emissive[idx] = (r, g, b, 220)
+
+    return w, h, albedo, emissive
+
+
+def save_portrait_square(src_path: Path, dst_path: Path, size: int = 256) -> None:
+    sw, sh, raw_px = read_rgba_png(src_path)
+    cw, ch, c_px = crop_and_resize_nearest(sw, sh, raw_px, size, size)
+    out: list[RGBA] = [(8, 12, 18, 255)] * (size * size)
+    x0 = (size - cw) // 2
+    y0 = (size - ch) // 2
+    for y in range(ch):
+        for x in range(cw):
+            r, g, b, a = c_px[y * cw + x]
+            if a > 16:
+                out[(y0 + y) * size + (x0 + x)] = (r, g, b, 255)
+    write_rgba_png(dst_path, size, size, out)
 
 
 def save_asset_triplet(
@@ -559,6 +805,7 @@ def main() -> None:
     sprites_dir = repo_root / "godot" / "assets" / "sprites"
     normals_dir = repo_root / "godot" / "assets" / "normals"
     venice_dir = Path("/tmp/venice_buildings")
+    venice_m7_dir = Path("/tmp/venice_m7")
 
     for mode, stem in (
         ("undergrid", "undergrid_grate"),
@@ -582,18 +829,40 @@ def main() -> None:
         )
         save_asset_triplet(tiles_dir, normals_dir, "biofoundry_tower_rubble", 256, 288, b_rubble_a, b_rubble_e)
 
-    for arch, stem, src_name in (
-        ("operative", "operative_trenchcoat", "operative_nobg.png"),
-        ("guard", "corp_sec_guard", "guard_nobg.png"),
-        ("civilian", "megacity_civilian", "civilian_nobg.png"),
+    if (venice_m7_dir / "city_tenement_nobg.png").exists():
+        tw, th, t_alb, t_emi = generate_isometric_tenement_block(venice_m7_dir / "city_tenement_nobg.png")
+        save_asset_triplet(tiles_dir, normals_dir, "city_block_tenement", tw, th, t_alb, t_emi)
+
+    if (venice_m7_dir / "city_corp_nobg.png").exists():
+        cw, ch, c_alb, c_emi = generate_isometric_corp_block(venice_m7_dir / "city_corp_nobg.png")
+        save_asset_triplet(tiles_dir, normals_dir, "city_block_corp", cw, ch, c_alb, c_emi)
+
+    for arch, stem, nobg_candidate in (
+        ("operative", "operative_trenchcoat", venice_dir / "operative_nobg.png"),
+        ("operative_female", "operative_female", venice_m7_dir / "operative_female_nobg.png"),
+        ("guard", "corp_sec_guard", venice_dir / "guard_nobg.png"),
+        ("civilian", "megacity_civilian", venice_dir / "civilian_nobg.png"),
+        ("civilian_f", "megacity_civilian_f", venice_m7_dir / "civilian_female_nobg.png"),
     ):
-        src_path = venice_dir / src_name
-        if src_path.exists():
-            sw, sh, s_albedo, s_emissive = process_venice_character_sheet(src_path, arch)
+        existing_alb = sprites_dir / f"{stem}_albedo.png"
+        if nobg_candidate.exists() or existing_alb.exists():
+            sw, sh, s_albedo, s_emissive = process_venice_character_sheet(
+                nobg_candidate if nobg_candidate.exists() else None,
+                existing_alb,
+                arch,
+            )
             save_asset_triplet(sprites_dir, normals_dir, stem, sw, sh, s_albedo, s_emissive)
 
-    print("Generated 13-tile 1664x64 Street Road/Fork/Turn/Plaza Atlas and Venice 32-bit sprites.")
+    for p_src, p_dst in (
+        (venice_m7_dir / "portrait_cryo_f2.png", sprites_dir / "portrait_cryo_f2.png"),
+        (venice_m7_dir / "portrait_cryo_m3.png", sprites_dir / "portrait_cryo_m3.png"),
+    ):
+        if p_src.exists():
+            save_portrait_square(p_src, p_dst, 256)
+
+    print("Generated 8x4 multi-pose animated character sheets, M/F rigs, city block buildings, and cryo portraits.")
 
 
 if __name__ == "__main__":
     main()
+

@@ -478,6 +478,7 @@ material = SubResource("ShaderMaterial_guard")
 position = Vector2(768, 444)
 texture = ExtResource("75_guard_albedo")
 hframes = 8
+vframes = 4
 frame = 6
 metadata/stratum = 1
 
@@ -486,6 +487,7 @@ material = SubResource("ShaderMaterial_guard")
 position = Vector2(448, 384)
 texture = ExtResource("75_guard_albedo")
 hframes = 8
+vframes = 4
 frame = 2
 metadata/stratum = 1
 
@@ -494,6 +496,7 @@ material = SubResource("ShaderMaterial_civ")
 position = Vector2(624, 476)
 texture = ExtResource("78_civ_albedo")
 hframes = 8
+vframes = 4
 frame = 0
 metadata/stratum = 1
 
@@ -502,6 +505,7 @@ material = SubResource("ShaderMaterial_civ")
 position = Vector2(868, 432)
 texture = ExtResource("78_civ_albedo")
 hframes = 8
+vframes = 4
 frame = 5
 metadata/stratum = 1
 
@@ -510,6 +514,7 @@ material = SubResource("ShaderMaterial_operative_street")
 position = Vector2(556, 424)
 texture = ExtResource("6_op_albedo")
 hframes = 8
+vframes = 4
 frame = 2
 metadata/stratum = 1
 
@@ -518,6 +523,7 @@ material = SubResource("ShaderMaterial_operative_street")
 position = Vector2(704, 388)
 texture = ExtResource("6_op_albedo")
 hframes = 8
+vframes = 4
 frame = 6
 metadata/stratum = 1
 
@@ -526,6 +532,7 @@ material = SubResource("ShaderMaterial_operative_under")
 position = Vector2(624, 516)
 texture = ExtResource("6_op_albedo")
 hframes = 8
+vframes = 4
 frame = 1
 metadata/stratum = 0
 
@@ -580,6 +587,7 @@ material = SubResource("ShaderMaterial_operative_spire")
 position = Vector2(640, 196)
 texture = ExtResource("6_op_albedo")
 hframes = 8
+vframes = 4
 frame = 0
 metadata/stratum = 2
 

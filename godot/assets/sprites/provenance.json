@@ -72,6 +72,34 @@
         "steps": 20,
         "width": 1024
       }
+    },
+    {
+      "id": "portrait_cryo_f2",
+      "output": "portrait_cryo_f2.png",
+      "dimensions": "256x256 (32-color Bayer dithered pixel art)",
+      "venice_metadata": {
+        "model": "venice-sd35",
+        "seed": 9701,
+        "width": 1024,
+        "height": 1024,
+        "safe_mode": false,
+        "hide_watermark": true,
+        "prompt": "1993 Bullfrog Syndicate dark cyberpunk clinical cryo-stasis cyborg operative ID mugshot portrait, brain-wiped female cortical meat-puppet operative, expressionless pale face with silver neural data-jack sockets on temples and glowing cyan sub-dermal optical implants, dark high-collar ballistic trenchcoat, clinical green-blue CRT scanline lighting, gritty 24-bit pixel art portrait"
+      }
+    },
+    {
+      "id": "portrait_cryo_m3",
+      "output": "portrait_cryo_m3.png",
+      "dimensions": "256x256 (32-color Bayer dithered pixel art)",
+      "venice_metadata": {
+        "model": "venice-sd35",
+        "seed": 9702,
+        "width": 1024,
+        "height": 1024,
+        "safe_mode": false,
+        "hide_watermark": true,
+        "prompt": "1993 Bullfrog Syndicate dark cyberpunk clinical cryo-stasis cyborg operative ID mugshot portrait, brain-wiped male cortical meat-puppet operative, shaved head with surgical titanium cranial staples, glowing amber ocular targeting lens implant, expressionless blank stare, black leather trenchcoat collar, dark clinical background, gritty 24-bit pixel art portrait"
+      }
     }
   ],
   "isometric_sprites_and_structures": [
@@ -112,13 +140,49 @@
       }
     },
     {
+      "id": "city_block_tenement",
+      "outputs": [
+        "../tiles/city_block_tenement_albedo.png",
+        "../tiles/city_block_tenement_emissive.png",
+        "../normals/city_block_tenement_normal.png"
+      ],
+      "dimensions": "256x256 (2:1 isometric 3D prism projection + 2.5D Sobel normal + emissive mask)",
+      "venice_metadata": {
+        "model": "venice-sd35",
+        "seed": 9901,
+        "width": 1024,
+        "height": 1024,
+        "safe_mode": false,
+        "hide_watermark": true,
+        "prompt": "Seamless cyberpunk Kowloon Walled City apartment building facade texture, dark weathered ferro-concrete wall with rows of small Recessed glass windows (some glowing warm amber and cyan), external rusting AC units, vertical red neon Kanji sign strip on side, gritty 1996 Syndicate Wars 32-bit pixel art texture"
+      }
+    },
+    {
+      "id": "city_block_corp",
+      "outputs": [
+        "../tiles/city_block_corp_albedo.png",
+        "../tiles/city_block_corp_emissive.png",
+        "../normals/city_block_corp_normal.png"
+      ],
+      "dimensions": "256x256 (2:1 isometric diamond-base clipped corporate tower + 2.5D Sobel normal + emissive mask)",
+      "venice_metadata": {
+        "model": "venice-sd35",
+        "seed": 9802,
+        "width": 1024,
+        "height": 1024,
+        "safe_mode": false,
+        "hide_watermark": true,
+        "prompt": "2:1 isometric game building asset, brutalist cyberpunk Zaibatsu corporate office data-tower, dark slate steel and armored glass stories, subtle cyan server window slits and amber hazard beacons on roof, gritty 1996 Syndicate Wars 32-bit pixel art style, isolated single building centered on solid flat white background"
+      }
+    },
+    {
       "id": "operative_trenchcoat",
       "outputs": [
         "operative_trenchcoat_albedo.png",
         "operative_trenchcoat_emissive.png",
         "../normals/operative_trenchcoat_normal.png"
       ],
-      "dimensions": "512x96 (8 frames @ 64x96 24/32-bit pixel art + 2.5D Sobel normal + emissive mask)",
+      "dimensions": "512x384 (8 directions x 4 animation rows @ 64x96: Idle, Walk Stride A, Walk Stride B, Combat Fire Crouch + 2.5D Sobel normal + emissive mask)",
       "venice_metadata": {
         "model": "venice-sd35",
         "seed": 9201,
@@ -126,7 +190,25 @@
         "height": 1024,
         "safe_mode": false,
         "hide_watermark": true,
-        "prompt": "2:1 isometric 32-bit pixel art game character sprite, full body cyberpunk syndicate operative wearing long dark black leather trenchcoat, glowing crimson cybernetic visor sunglasses, chrome bionic arm holding heavy Gauss rifle, 1993 Bullfrog Syndicate game style, single isolated character standing centered on solid flat magenta background, crisp pixel edges"
+        "prompt": "2:1 isometric 32-bit pixel art game character sprite, full body cyberpunk syndicate operative wearing long dark black leather trenchcoat, glowing crimson cybernetic visor sunglasses, chrome bionic arm holding heavy Gauss rifle, 1993 Bullfrog Syndicate game style"
+      }
+    },
+    {
+      "id": "operative_female",
+      "outputs": [
+        "operative_female_albedo.png",
+        "operative_female_emissive.png",
+        "../normals/operative_female_normal.png"
+      ],
+      "dimensions": "512x384 (8 directions x 4 animation rows @ 64x96: Idle, Walk Stride A, Walk Stride B, Combat Fire Crouch + 2.5D Sobel normal + emissive mask)",
+      "venice_metadata": {
+        "model": "venice-sd35",
+        "seed": 9601,
+        "width": 1024,
+        "height": 1024,
+        "safe_mode": false,
+        "hide_watermark": true,
+        "prompt": "2:1 isometric 32-bit pixel art game character sprite, full body athletic female cyberpunk syndicate operative wearing tailored long black leather trenchcoat, silver hair, glowing cyan cybernetic visor sunglasses, holding compact submachine carbine, 1993 Bullfrog Syndicate game style"
       }
     },
     {
@@ -136,7 +218,7 @@
         "corp_sec_guard_emissive.png",
         "../normals/corp_sec_guard_normal.png"
       ],
-      "dimensions": "512x96 (8 frames @ 64x96 24/32-bit pixel art + 2.5D Sobel normal + emissive mask)",
+      "dimensions": "512x384 (8 directions x 4 animation rows @ 64x96: Idle, Walk Stride A, Walk Stride B, Combat Fire Crouch + 2.5D Sobel normal + emissive mask)",
       "venice_metadata": {
         "model": "venice-sd35",
         "seed": 9202,
@@ -144,7 +226,7 @@
         "height": 1024,
         "safe_mode": false,
         "hide_watermark": true,
-        "prompt": "2:1 isometric 32-bit pixel art game character sprite, full body cyberpunk Zaibatsu corporate security guard in dark gunmetal and yellow-amber hazard armored carapace suit, glowing amber visor helmet, holding heavy pulse carbine rifle, 1996 Syndicate Wars game style, single isolated character standing centered on solid flat magenta background, crisp pixel edges"
+        "prompt": "2:1 isometric 32-bit pixel art game character sprite, full body cyberpunk Zaibatsu corporate security guard in dark gunmetal and yellow-amber hazard armored carapace suit, glowing amber visor helmet, holding heavy pulse carbine rifle, 1996 Syndicate Wars game style"
       }
     },
     {
@@ -154,7 +236,7 @@
         "megacity_civilian_emissive.png",
         "../normals/megacity_civilian_normal.png"
       ],
-      "dimensions": "512x96 (8 frames @ 64x96 24/32-bit pixel art + 2.5D Sobel normal + emissive mask)",
+      "dimensions": "512x384 (8 directions x 4 animation rows @ 64x96: Idle, Walk Stride A, Walk Stride B, Panic Sprint + 2.5D Sobel normal + emissive mask)",
       "venice_metadata": {
         "model": "venice-sd35",
         "seed": 9203,
@@ -162,7 +244,25 @@
         "height": 1024,
         "safe_mode": false,
         "hide_watermark": true,
-        "prompt": "2:1 isometric 32-bit pixel art game character sprite, full body cyberpunk Kowloon megacity street civilian wearing dark slate rain-slicked techwear hooded jacket and cargo pants with subtle cyan data-jack collar, 1996 Syndicate Wars game style, single isolated character standing centered on solid flat magenta background, crisp pixel edges"
+        "prompt": "2:1 isometric 32-bit pixel art game character sprite, full body cyberpunk Kowloon megacity street civilian wearing dark slate rain-slicked techwear hooded jacket and cargo pants with subtle cyan data-jack collar, 1996 Syndicate Wars game style"
+      }
+    },
+    {
+      "id": "megacity_civilian_f",
+      "outputs": [
+        "megacity_civilian_f_albedo.png",
+        "megacity_civilian_f_emissive.png",
+        "../normals/megacity_civilian_f_normal.png"
+      ],
+      "dimensions": "512x384 (8 directions x 4 animation rows @ 64x96: Idle, Walk Stride A, Walk Stride B, Panic Sprint + 2.5D Sobel normal + emissive mask)",
+      "venice_metadata": {
+        "model": "venice-sd35",
+        "seed": 9602,
+        "width": 1024,
+        "height": 1024,
+        "safe_mode": false,
+        "hide_watermark": true,
+        "prompt": "2:1 isometric 32-bit pixel art game character sprite, full body female cyberpunk Kowloon megacity street civilian wearing cropped techwear bomber jacket and slim cargo trousers with subtle neon collar trim, 1996 Syndicate Wars game style"
       }
     }
   ]
