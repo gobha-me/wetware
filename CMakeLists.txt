@@ -16,6 +16,7 @@ add_compile_options(
 
 add_library(wetware_sim STATIC
   src/simulation.cpp
+  src/scenarios.cpp
 )
 target_include_directories(wetware_sim PUBLIC
   ${CMAKE_CURRENT_SOURCE_DIR}/include

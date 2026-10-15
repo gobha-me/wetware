@@ -12,6 +12,8 @@ constexpr double kOrganAcceleratorMultiplier = 0.35; // -65% cost & time
 constexpr double kClearinghouseBonusMultiplier = 1.25;
 constexpr double kSinglePlayerBulletTimeScale = 0.25;
 constexpr double kRedlineThreshold = 0.80;
+// Slab-breach fall damage before cyber-leg mitigation (5 HP per legs tier).
+constexpr int kFallBaseDamage = 30;
 
 std::uint64_t fnv1a_mix(std::uint64_t hash, std::uint64_t value) noexcept {
   for (int i = 0; i < 8; ++i) {
@@ -250,6 +252,17 @@ const BuildingStructure* MegacitySimulation::find_building(
   return nullptr;
 }
 
+DistrictId MegacitySimulation::operative_district(
+    const OperativeState& op) const noexcept {
+  const auto* bld = find_building(op.occupied_building);
+  return bld != nullptr ? bld->district_id : 0;
+}
+
+void MegacitySimulation::record_event(SimEvent event) {
+  event.tick = tick_;
+  events_.push_back(event);
+}
+
 bool MegacitySimulation::controls_intact_organ(SyndicateId syndicate_id,
                                                CityOrgan organ) const noexcept {
   for (const auto& district : districts_) {
@@ -330,6 +343,8 @@ Credits MegacitySimulation::calculate_district_daily_revenue(
   if (district == nullptr) return 0;
 
   Credits total = 0;
+  // Intact pays full, Damaged pays half; Rubble and Rebuilding pay nothing
+  // until the structure is restored (the scorched-earth economic penalty).
   for (const BuildingId bid : district->buildings) {
     const auto* bld = find_building(bid);
     if (bld == nullptr) continue;
@@ -390,6 +405,11 @@ void MegacitySimulation::propagate_structural_collapse(
       });
 
   if (any_collapsed) {
+    if (building.state != BuildingState::Rubble) {
+      record_event(SimEvent{.kind = SimEventKind::BuildingCollapsed,
+                            .actor_id = building.id,
+                            .district_id = building.district_id});
+    }
     building.state = BuildingState::Rubble;
     building.rebuild_ticks_remaining = building.rebuild_total_ticks;
 
@@ -453,8 +473,11 @@ bool MegacitySimulation::apply_command(const SimulationCommand& cmd) {
                                   ? OverclockState::BulletTimeDilation
                                   : OverclockState::HyperReflexSurge);
 
-    for (auto& op : syn->squad) {
+    for (std::size_t oi = 0; oi < syn->squad.size(); ++oi) {
+      auto& op = syn->squad.at(oi);
       if (!op.alive) continue;
+      const bool selected = ((overclock->operative_mask >> oi) & 1U) != 0U;
+      if (overclock->active && !selected) continue;
       op.overclock = target_state;
       if (overclock->active) {
         op.sliders.adrenaline = std::max(op.sliders.adrenaline, 0.95);
@@ -469,6 +492,34 @@ bool MegacitySimulation::apply_command(const SimulationCommand& cmd) {
       tactical_time_scale_ = 1.0;
       macro_city_time_scale_ = 1.0;
     }
+    return true;
+  }
+
+  if (const auto* deploy = std::get_if<CommandDeployOperative>(&cmd)) {
+    auto* syn = find_syndicate_mut(deploy->syndicate_id);
+    const auto* bld = find_building(deploy->building_id);
+    if (syn == nullptr || bld == nullptr ||
+        deploy->operative_index >= syn->squad.size()) {
+      return false;
+    }
+    const auto* dist = find_district(bld->district_id);
+    if (dist == nullptr || !dist->tactical_grid.in_bounds(deploy->coord)) {
+      return false;
+    }
+    auto& op = syn->squad.at(deploy->operative_index);
+    if (!op.alive) return false;
+    const DistrictId from_district = operative_district(op);
+    const GridCoord from_coord = op.grid_pos;
+    op.occupied_building = deploy->building_id;
+    op.grid_pos = deploy->coord;
+    op.current_stratum = deploy->coord.stratum;
+    record_event(SimEvent{.kind = SimEventKind::OperativeDeployed,
+                          .syndicate_id = syn->id,
+                          .actor_id = op.id,
+                          .district_id = bld->district_id,
+                          .from = from_coord,
+                          .to = deploy->coord,
+                          .value = static_cast<std::int32_t>(from_district)});
     return true;
   }
 
@@ -636,16 +687,36 @@ bool MegacitySimulation::apply_command(const SimulationCommand& cmd) {
                                       ? Stratum::Street
                                       : Stratum::UnderGrid;
 
+    record_event(SimEvent{.kind = SimEventKind::SlabBreach,
+                          .district_id = breach->district_id,
+                          .from = breach->coord,
+                          .to = breach->coord});
+
     for (auto& syn : syndicates_) {
       for (auto& op : syn.squad) {
-        if (op.alive && op.grid_pos == breach->coord) {
+        if (op.alive && op.grid_pos == breach->coord &&
+            operative_district(op) == breach->district_id) {
+          const GridCoord fell_from = op.grid_pos;
           op.current_stratum = lower_stratum;
           op.grid_pos.stratum = lower_stratum;
           const int legs_mitigation =
               static_cast<int>(op.organ_tier(OrganSlot::Legs)) * 5;
-          op.health = std::max(0, op.health - (30 - legs_mitigation));
+          const int fall_damage = kFallBaseDamage - legs_mitigation;
+          op.health = std::max(0, op.health - fall_damage);
+          record_event(SimEvent{.kind = SimEventKind::FallDamage,
+                                .syndicate_id = syn.id,
+                                .actor_id = op.id,
+                                .district_id = breach->district_id,
+                                .from = fell_from,
+                                .to = op.grid_pos,
+                                .value = fall_damage});
           if (op.health == 0) {
             op.alive = false;
+            record_event(SimEvent{.kind = SimEventKind::OperativeKilled,
+                                  .syndicate_id = syn.id,
+                                  .actor_id = op.id,
+                                  .district_id = breach->district_id,
+                                  .to = op.grid_pos});
           }
         }
       }
@@ -661,9 +732,17 @@ bool MegacitySimulation::apply_command(const SimulationCommand& cmd) {
       return false;
     }
     const auto& shooter = attacker->squad.at(fire->operative_index);
-    if (!shooter.alive || !dist->tactical_grid.in_bounds(fire->target_coord)) {
+    if (!shooter.alive || !dist->tactical_grid.in_bounds(fire->target_coord) ||
+        operative_district(shooter) != fire->district_id) {
       return false;
     }
+    record_event(SimEvent{.kind = SimEventKind::ShotFired,
+                          .syndicate_id = fire->attacker_syndicate_id,
+                          .actor_id = shooter.id,
+                          .district_id = fire->district_id,
+                          .from = shooter.grid_pos,
+                          .to = fire->target_coord,
+                          .weapon = fire->weapon});
 
     auto spawn_corpse_drop = [&](SyndicateId owner_id,
                                  const OperativeState& dead_op) {
@@ -712,12 +791,26 @@ bool MegacitySimulation::apply_command(const SimulationCommand& cmd) {
         cell.breached = (s != Stratum::UnderGrid);
         dist->tactical_grid.set_cell(c, cell);
       }
+      record_event(SimEvent{.kind = SimEventKind::OrbitalStrike,
+                            .syndicate_id = fire->attacker_syndicate_id,
+                            .actor_id = shooter.id,
+                            .district_id = fire->district_id,
+                            .to = fire->target_coord,
+                            .weapon = fire->weapon});
       for (auto& syn : syndicates_) {
         for (auto& op : syn.squad) {
           if (op.alive && op.grid_pos.x == fire->target_coord.x &&
-              op.grid_pos.y == fire->target_coord.y) {
+              op.grid_pos.y == fire->target_coord.y &&
+              operative_district(op) == fire->district_id) {
             op.health = 0;
             op.alive = false;
+            record_event(SimEvent{.kind = SimEventKind::OperativeKilled,
+                                  .syndicate_id = syn.id,
+                                  .actor_id = op.id,
+                                  .target_id = shooter.id,
+                                  .district_id = fire->district_id,
+                                  .to = op.grid_pos,
+                                  .weapon = fire->weapon});
             spawn_corpse_drop(syn.id, op);
           }
         }
@@ -757,7 +850,8 @@ bool MegacitySimulation::apply_command(const SimulationCommand& cmd) {
     for (auto& syn : syndicates_) {
       if (syn.id == fire->attacker_syndicate_id) continue;
       for (auto& op : syn.squad) {
-        if (op.alive && op.grid_pos == fire->target_coord) {
+        if (op.alive && op.grid_pos == fire->target_coord &&
+            operative_district(op) == fire->district_id) {
           // Check if a persuaded Escort thrall in this district & stratum
           // intercepts the incoming ballistic fire as a human shield
           auto shield_it =
@@ -767,16 +861,41 @@ bool MegacitySimulation::apply_command(const SimulationCommand& cmd) {
                        t.stratum == fire->target_coord.stratum;
               });
           if (shield_it != syn.thralls.end()) {
+            record_event(SimEvent{.kind = SimEventKind::ShieldIntercept,
+                                  .syndicate_id = syn.id,
+                                  .actor_id = shield_it->actor_id,
+                                  .target_id = op.id,
+                                  .district_id = fire->district_id,
+                                  .from = shooter.grid_pos,
+                                  .to = op.grid_pos,
+                                  .value = base_damage,
+                                  .weapon = fire->weapon});
             syn.thralls.erase(shield_it);
             continue;
           }
 
           const int chest_armor =
               static_cast<int>(op.organ_tier(OrganSlot::Chest)) * 10;
-          op.health =
-              std::max(0, op.health - std::max(10, base_damage - chest_armor));
+          const int damage = std::max(10, base_damage - chest_armor);
+          op.health = std::max(0, op.health - damage);
+          record_event(SimEvent{.kind = SimEventKind::OperativeHit,
+                                .syndicate_id = syn.id,
+                                .actor_id = op.id,
+                                .target_id = shooter.id,
+                                .district_id = fire->district_id,
+                                .from = shooter.grid_pos,
+                                .to = op.grid_pos,
+                                .value = damage,
+                                .weapon = fire->weapon});
           if (op.health == 0) {
             op.alive = false;
+            record_event(SimEvent{.kind = SimEventKind::OperativeKilled,
+                                  .syndicate_id = syn.id,
+                                  .actor_id = op.id,
+                                  .target_id = shooter.id,
+                                  .district_id = fire->district_id,
+                                  .to = op.grid_pos,
+                                  .weapon = fire->weapon});
             spawn_corpse_drop(syn.id, op);
           }
         }
@@ -793,13 +912,24 @@ bool MegacitySimulation::apply_command(const SimulationCommand& cmd) {
       return false;
     }
     const auto& extractor = syn->squad.at(extract->operative_index);
-    if (!extractor.alive) return false;
+    if (!extractor.alive ||
+        operative_district(extractor) != extract->district_id) {
+      return false;
+    }
 
     bool any_extracted = false;
     for (auto& drop : dist->corpse_drops) {
       if (!drop.extracted && drop.coord == extractor.grid_pos) {
         drop.extracted = true;
         any_extracted = true;
+        record_event(SimEvent{
+            .kind = SimEventKind::SalvageExtracted,
+            .syndicate_id = syn->id,
+            .actor_id = extractor.id,
+            .target_id = drop.fallen_operative_id,
+            .district_id = extract->district_id,
+            .to = drop.coord,
+            .value = static_cast<std::int32_t>(drop.blueprint_ids.size())});
         for (const BlueprintId bp_id : drop.blueprint_ids) {
           bool merged = false;
           for (auto& unit : syn->cryo_vault_salvage) {
@@ -956,6 +1086,12 @@ bool MegacitySimulation::apply_command(const SimulationCommand& cmd) {
     op.cardiac_strain = 0.0;
     op.overclock = OverclockState::Inactive;
     op.medical_status = MedicalStatus::Nominal;
+    record_event(SimEvent{.kind = SimEventKind::CryoThaw,
+                          .syndicate_id = syn->id,
+                          .actor_id = op.id,
+                          .district_id = operative_district(op),
+                          .to = op.grid_pos,
+                          .value = 500});
     return true;
   }
 
@@ -997,11 +1133,13 @@ void MegacitySimulation::step_syndicate_biochem(SyndicateLedger& syndicate) {
       op.overclock = OverclockState::Inactive;
 
       // Spawn harvestable cyber-organ drop at flatlined operative's position
-      DistrictId drop_dist_id = 1;
-      if (const auto* bld = find_building(op.occupied_building);
-          bld != nullptr) {
-        drop_dist_id = bld->district_id;
-      }
+      DistrictId drop_dist_id = operative_district(op);
+      if (drop_dist_id == 0) drop_dist_id = 1;
+      record_event(SimEvent{.kind = SimEventKind::CardiacFlatline,
+                            .syndicate_id = syndicate.id,
+                            .actor_id = op.id,
+                            .district_id = drop_dist_id,
+                            .to = op.grid_pos});
       if (auto* dist = find_district_mut(drop_dist_id); dist != nullptr) {
         std::vector<BlueprintId> drops;
         for (const auto& bp : blueprints_) {
@@ -1213,12 +1351,23 @@ bool MegacitySimulation::attempt_persuade(
     return false;
   }
 
+  const auto& persuader = syn->squad.at(operative_index);
+  if (operative_district(persuader) != district_id) return false;
   if (target_class == PersuadeTargetClass::RivalOperative) {
     for (auto& rival_syn : syndicates_) {
       if (rival_syn.id == syndicate_id) continue;
       for (auto& rop : rival_syn.squad) {
         if (rop.id == actor_id && rop.alive) {
           rop.alive = false;
+          record_event(
+              SimEvent{.kind = SimEventKind::RivalHijacked,
+                       .syndicate_id = syndicate_id,
+                       .actor_id = persuader.id,
+                       .target_id = rop.id,
+                       .district_id = district_id,
+                       .from = persuader.grid_pos,
+                       .to = rop.grid_pos,
+                       .value = static_cast<std::int32_t>(rival_syn.id)});
         }
       }
     }
@@ -1231,6 +1380,13 @@ bool MegacitySimulation::attempt_persuade(
       .stratum = stratum,
       .directive = directive,
   });
+  record_event(SimEvent{.kind = SimEventKind::Persuaded,
+                        .syndicate_id = syndicate_id,
+                        .actor_id = persuader.id,
+                        .target_id = actor_id,
+                        .district_id = district_id,
+                        .from = persuader.grid_pos,
+                        .value = static_cast<std::int32_t>(target_class)});
   return true;
 }
 
@@ -1311,6 +1467,10 @@ RaidOutcome MegacitySimulation::resolve_district_raid(
     }
   } else {
     target_district->owner_syndicate = attacker_id;
+    record_event(SimEvent{.kind = SimEventKind::DistrictCaptured,
+                          .syndicate_id = attacker_id,
+                          .target_id = outcome.defender_id,
+                          .district_id = district_id});
   }
 
   return outcome;
@@ -1369,11 +1529,47 @@ std::uint64_t MegacitySimulation::state_digest() const noexcept {
   return hash;
 }
 
-std::string MegacitySimulation::export_snapshot_json() const {
+namespace {
+
+std::string json_bool(bool v) {
+  return v ? "true" : "false";
+}
+
+std::string json_coord(const GridCoord& c) {
+  return "{\"x\": " + std::to_string(c.x) + ", \"y\": " + std::to_string(c.y) +
+         ", \"stratum\": " + std::to_string(static_cast<unsigned>(c.stratum)) +
+         "}";
+}
+
+const char* event_kind_name(SimEventKind kind) noexcept {
+  switch (kind) {
+    case SimEventKind::ShotFired: return "shot_fired";
+    case SimEventKind::OperativeHit: return "operative_hit";
+    case SimEventKind::ShieldIntercept: return "shield_intercept";
+    case SimEventKind::OperativeKilled: return "operative_killed";
+    case SimEventKind::OrbitalStrike: return "orbital_strike";
+    case SimEventKind::SlabBreach: return "slab_breach";
+    case SimEventKind::FallDamage: return "fall_damage";
+    case SimEventKind::CardiacFlatline: return "cardiac_flatline";
+    case SimEventKind::Persuaded: return "persuaded";
+    case SimEventKind::RivalHijacked: return "rival_hijacked";
+    case SimEventKind::SalvageExtracted: return "salvage_extracted";
+    case SimEventKind::CryoThaw: return "cryo_thaw";
+    case SimEventKind::BuildingCollapsed: return "building_collapsed";
+    case SimEventKind::DistrictCaptured: return "district_captured";
+    case SimEventKind::OperativeDeployed: return "operative_deployed";
+  }
+  return "unknown";
+}
+
+} // namespace
+
+std::string MegacitySimulation::export_snapshot_json(
+    DistrictId focus_district_id) const {
   std::string out;
-  out.reserve(4096);
+  out.reserve(16384);
   out += "{\n";
-  out += "  \"schema_version\": 1,\n";
+  out += "  \"schema_version\": 2,\n";
   out += "  \"tick\": " + std::to_string(tick_) + ",\n";
   out += "  \"session_mode\": " + std::to_string(static_cast<unsigned>(mode_)) +
          ",\n";
@@ -1383,22 +1579,47 @@ std::string MegacitySimulation::export_snapshot_json() const {
       "  \"macro_city_time_scale\": " + std::to_string(macro_city_time_scale_) +
       ",\n";
   out += "  \"state_digest\": \"" + std::to_string(state_digest()) + "\",\n";
+  out +=
+      "  \"focus_district_id\": " + std::to_string(focus_district_id) + ",\n";
 
   out += "  \"syndicates\": [\n";
   for (std::size_t si = 0; si < syndicates_.size(); ++si) {
     const auto& syn = syndicates_.at(si);
+    std::uint32_t salvage_units = 0;
+    for (const auto& unit : syn.cryo_vault_salvage) {
+      salvage_units += unit.quantity;
+    }
     out += "    {\n";
     out += "      \"id\": " + std::to_string(syn.id) + ",\n";
     out += "      \"name\": \"" + syn.name + "\",\n";
     out += "      \"treasury\": " + std::to_string(syn.treasury) + ",\n";
+    out += "      \"daily_net\": " +
+           std::to_string(calculate_syndicate_daily_net(syn.id)) + ",\n";
+    out += "      \"salvage_units\": " + std::to_string(salvage_units) + ",\n";
     out += "      \"thralls_count\": " + std::to_string(syn.thralls.size()) +
            ",\n";
+    out += "      \"thralls\": [";
+    for (std::size_t ti = 0; ti < syn.thralls.size(); ++ti) {
+      const auto& t = syn.thralls.at(ti);
+      out += (ti == 0 ? "\n" : ",\n");
+      out +=
+          "        {\"actor_id\": " + std::to_string(t.actor_id) +
+          ", \"target_class\": " +
+          std::to_string(static_cast<unsigned>(t.target_class)) +
+          ", \"district_id\": " + std::to_string(t.district_id) +
+          ", \"stratum\": " + std::to_string(static_cast<unsigned>(t.stratum)) +
+          ", \"directive\": " +
+          std::to_string(static_cast<unsigned>(t.directive)) + "}";
+    }
+    out += syn.thralls.empty() ? "],\n" : "\n      ],\n";
     out += "      \"squad\": [\n";
     for (std::size_t oi = 0; oi < syn.squad.size(); ++oi) {
       const auto& op = syn.squad.at(oi);
       out += "        {\n";
       out += "          \"id\": " + std::to_string(op.id) + ",\n";
       out += "          \"callsign\": \"" + op.callsign + "\",\n";
+      out += "          \"district_id\": " +
+             std::to_string(operative_district(op)) + ",\n";
       out += "          \"stratum\": " +
              std::to_string(static_cast<unsigned>(op.current_stratum)) + ",\n";
       out += "          \"grid_x\": " + std::to_string(op.grid_pos.x) + ",\n";
@@ -1406,8 +1627,17 @@ std::string MegacitySimulation::export_snapshot_json() const {
       out += "          \"occupied_building\": " +
              std::to_string(op.occupied_building) + ",\n";
       out += "          \"health\": " + std::to_string(op.health) + ",\n";
+      out += "          \"alive\": " + json_bool(op.alive) + ",\n";
+      out += "          \"primary_weapon\": " +
+             std::to_string(static_cast<unsigned>(op.primary_weapon)) + ",\n";
+      out += "          \"organs\": [";
+      for (std::size_t gi = 0; gi < op.organs.size(); ++gi) {
+        out += (gi == 0 ? "" : ", ") +
+               std::to_string(static_cast<unsigned>(op.organs.at(gi)));
+      }
+      out += "],\n";
       out +=
-          "          \"alive\": " + std::string(op.alive ? "true" : "false") +
+          "          \"cardiac_strain\": " + std::to_string(op.cardiac_strain) +
           ",\n";
       out += "          \"overclock\": " +
              std::to_string(static_cast<unsigned>(op.overclock)) + ",\n";
@@ -1431,20 +1661,36 @@ std::string MegacitySimulation::export_snapshot_json() const {
         ",\n";
     out += "      \"organ\": " +
            std::to_string(static_cast<unsigned>(dist.organ)) + ",\n";
-    out += "      \"power_blackout\": " +
-           std::string(dist.power_blackout ? "true" : "false") + ",\n";
-    out += "      \"crowd_surge_active\": " +
-           std::string(dist.crowd_surge_active ? "true" : "false") + ",\n";
-    out += "      \"transformer_intact\": " +
-           std::string(dist.transformer_intact ? "true" : "false") + ",\n";
+    out += "      \"daily_revenue\": " +
+           std::to_string(calculate_district_daily_revenue(dist.id)) + ",\n";
+    out +=
+        "      \"power_blackout\": " + json_bool(dist.power_blackout) + ",\n";
+    out +=
+        "      \"crowd_surge_active\": " + json_bool(dist.crowd_surge_active) +
+        ",\n";
+    out +=
+        "      \"transformer_intact\": " + json_bool(dist.transformer_intact) +
+        ",\n";
     out += "      \"executive_convoy_active\": " +
-           std::string(dist.executive_convoy_active ? "true" : "false") + ",\n";
+           json_bool(dist.executive_convoy_active) + ",\n";
     out += "      \"sleeper_vision_syndicate\": " +
            std::to_string(dist.sleeper_vision_syndicate) + ",\n";
     out += "      \"monorail_wreck_lootable\": " +
-           std::string(dist.monorail_wreck_lootable ? "true" : "false") + ",\n";
+           json_bool(dist.monorail_wreck_lootable) + ",\n";
     out += "      \"corpse_drops_count\": " +
-           std::to_string(dist.corpse_drops.size()) + "\n";
+           std::to_string(dist.corpse_drops.size()) + ",\n";
+    out += "      \"corpse_drops\": [";
+    for (std::size_t ci = 0; ci < dist.corpse_drops.size(); ++ci) {
+      const auto& drop = dist.corpse_drops.at(ci);
+      out += (ci == 0 ? "\n" : ",\n");
+      out += "        {\"fallen_operative_id\": " +
+             std::to_string(drop.fallen_operative_id) + ", \"syndicate_id\": " +
+             std::to_string(drop.original_syndicate_id) +
+             ", \"coord\": " + json_coord(drop.coord) +
+             ", \"parts\": " + std::to_string(drop.blueprint_ids.size()) +
+             ", \"extracted\": " + json_bool(drop.extracted) + "}";
+    }
+    out += dist.corpse_drops.empty() ? "]\n" : "\n      ]\n";
     out += (di + 1 < districts_.size()) ? "    },\n" : "    }\n";
   }
   out += "  ],\n";
@@ -1456,6 +1702,8 @@ std::string MegacitySimulation::export_snapshot_json() const {
     out += "      \"id\": " + std::to_string(bld.id) + ",\n";
     out += "      \"name\": \"" + bld.name + "\",\n";
     out += "      \"district_id\": " + std::to_string(bld.district_id) + ",\n";
+    out += "      \"houses_city_organ\": " + json_bool(bld.houses_city_organ) +
+           ",\n";
     out +=
         "      \"state\": " + std::to_string(static_cast<unsigned>(bld.state)) +
         ",\n";
@@ -1463,7 +1711,25 @@ std::string MegacitySimulation::export_snapshot_json() const {
            std::to_string(bld.rebuild_ticks_remaining) + "\n";
     out += (bi + 1 < buildings_.size()) ? "    },\n" : "    }\n";
   }
-  out += "  ]\n";
+  out += "  ],\n";
+
+  out += "  \"events\": [";
+  for (std::size_t ei = 0; ei < events_.size(); ++ei) {
+    const auto& ev = events_.at(ei);
+    out += (ei == 0 ? "\n" : ",\n");
+    out += "    {\"tick\": " + std::to_string(ev.tick) + ", \"kind\": \"" +
+           event_kind_name(ev.kind) +
+           "\", \"syndicate_id\": " + std::to_string(ev.syndicate_id) +
+           ", \"actor_id\": " + std::to_string(ev.actor_id) +
+           ", \"target_id\": " + std::to_string(ev.target_id) +
+           ", \"district_id\": " + std::to_string(ev.district_id) +
+           ", \"from\": " + json_coord(ev.from) +
+           ", \"to\": " + json_coord(ev.to) +
+           ", \"value\": " + std::to_string(ev.value) +
+           ", \"weapon\": " + std::to_string(static_cast<unsigned>(ev.weapon)) +
+           "}";
+  }
+  out += events_.empty() ? "]\n" : "\n  ]\n";
   out += "}\n";
   return out;
 }

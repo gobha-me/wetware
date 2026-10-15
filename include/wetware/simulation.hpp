@@ -288,6 +288,40 @@ struct RaidOutcome {
   Credits loot_credits{0};
 };
 
+// Authoritative, append-only record of what the simulation resolved. The
+// presentation layer replays these (tracers, falls, flatlines) instead of
+// inventing its own combat; tests assert on them.
+enum class SimEventKind : std::uint8_t {
+  ShotFired = 0,
+  OperativeHit = 1,
+  ShieldIntercept = 2,
+  OperativeKilled = 3,
+  OrbitalStrike = 4,
+  SlabBreach = 5,
+  FallDamage = 6,
+  CardiacFlatline = 7,
+  Persuaded = 8,
+  RivalHijacked = 9,
+  SalvageExtracted = 10,
+  CryoThaw = 11,
+  BuildingCollapsed = 12,
+  DistrictCaptured = 13,
+  OperativeDeployed = 14, // value = district the operative came from
+};
+
+struct SimEvent {
+  SimulationTick tick{0};
+  SimEventKind kind{SimEventKind::ShotFired};
+  SyndicateId syndicate_id{0}; // syndicate that acted / owns the subject
+  std::uint32_t actor_id{0};   // operative, thrall, or building id
+  std::uint32_t target_id{0};  // victim / persuaded actor / defender
+  DistrictId district_id{0};
+  GridCoord from{};
+  GridCoord to{};
+  std::int32_t value{0}; // damage, credits, class, or count (kind-specific)
+  WeaponId weapon{WeaponId::Persuadertron};
+};
+
 struct CommandSetBiochem {
   SyndicateId syndicate_id{0};
   std::size_t operative_index{0};
@@ -297,6 +331,17 @@ struct CommandSetBiochem {
 struct CommandTriggerOverclock {
   SyndicateId syndicate_id{0};
   bool active{true};
+  // Bit i selects squad slot i for the adrenaline surge (default: all four).
+  // Time dilation itself is global in Single-Player; cardiac strain is not.
+  std::uint8_t operative_mask{0x0F};
+};
+
+// Physically (re)deploy an operative into a district building and grid cell.
+struct CommandDeployOperative {
+  SyndicateId syndicate_id{0};
+  std::size_t operative_index{0};
+  BuildingId building_id{0};
+  GridCoord coord{};
 };
 
 struct CommandShearColumns {
@@ -385,15 +430,14 @@ struct CommandThawCryoReplacement {
   std::string new_callsign;
 };
 
-using SimulationCommand =
-    std::variant<CommandSetBiochem, CommandTriggerOverclock,
-                 CommandShearColumns, CommandFundRebuild,
-                 CommandAllocateResearch, CommandSalvageFieldHardware,
-                 CommandUseSalvage, CommandTraverseVerticalShaft,
-                 CommandBreachFloorSlab, CommandFireOrdinance,
-                 CommandExtractCorpseSalvage, CommandTriggerThrallDirective,
-                 CommandLootMonorailWreck, CommandSabotageTransformer,
-                 CommandInterceptExecutiveConvoy, CommandThawCryoReplacement>;
+using SimulationCommand = std::variant<
+    CommandSetBiochem, CommandTriggerOverclock, CommandShearColumns,
+    CommandFundRebuild, CommandAllocateResearch, CommandSalvageFieldHardware,
+    CommandUseSalvage, CommandTraverseVerticalShaft, CommandBreachFloorSlab,
+    CommandFireOrdinance, CommandExtractCorpseSalvage,
+    CommandTriggerThrallDirective, CommandLootMonorailWreck,
+    CommandSabotageTransformer, CommandInterceptExecutiveConvoy,
+    CommandThawCryoReplacement, CommandDeployOperative>;
 
 class MegacitySimulation {
  public:
@@ -463,13 +507,24 @@ class MegacitySimulation {
       std::optional<SyndicateId> live_interceptor = std::nullopt);
 
   [[nodiscard]] std::uint64_t state_digest() const noexcept;
-  [[nodiscard]] std::string export_snapshot_json() const;
+  // focus_district_id is a presentation hint telling the renderer which
+  // district sector to display (0 = none).
+  [[nodiscard]] std::string export_snapshot_json(
+      DistrictId focus_district_id = 0) const;
   [[nodiscard]] const std::vector<SimulationCommand>& command_log()
       const noexcept {
     return command_log_;
   }
+  [[nodiscard]] const std::vector<SimEvent>& events() const noexcept {
+    return events_;
+  }
+  // District an operative is deployed in, derived from its occupied
+  // building (0 if the operative is not deployed in any district).
+  [[nodiscard]] DistrictId operative_district(
+      const OperativeState& op) const noexcept;
 
  private:
+  void record_event(SimEvent event);
   void propagate_structural_collapse(BuildingStructure& building);
   void step_syndicate_biochem(SyndicateLedger& syndicate);
   void step_syndicate_research(SyndicateLedger& syndicate);
@@ -486,6 +541,7 @@ class MegacitySimulation {
   std::vector<DistrictState> districts_;
   std::vector<BuildingStructure> buildings_;
   std::vector<SimulationCommand> command_log_;
+  std::vector<SimEvent> events_;
 };
 
 MegacitySimulation create_default_vertical_slice(

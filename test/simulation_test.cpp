@@ -1,3 +1,4 @@
+#include "wetware/scenarios.hpp"
 #include "wetware/simulation.hpp"
 
 #include <cstdlib>
@@ -216,7 +217,9 @@ void test_deterministic_command_replay() {
   const std::string json_a = sim_a.export_snapshot_json();
   const std::string json_b = sim_b.export_snapshot_json();
   require(json_a == json_b &&
-              json_a.find("\"schema_version\": 1") != std::string::npos,
+              json_a.find("\"schema_version\": 2") != std::string::npos &&
+              json_a.find("\"events\": [") != std::string::npos &&
+              sim_a.events().size() == sim_b.events().size(),
           "Deterministic snapshot JSON export matches across replays");
 }
 
@@ -231,8 +234,26 @@ void test_ordinance_strike_and_corpse_wetware_extraction() {
   require(rival != nullptr && player != nullptr, "Syndicates exist");
   rival->squad.at(0).set_organ_tier(wetware::OrganSlot::Legs,
                                     wetware::CyberTier::V3);
-  player->squad.at(2).grid_pos =
-      wetware::GridCoord{8, 8, wetware::Stratum::Street};
+  // Bring ONI-1 and ONI-2 into Kowloon (District 1); NULL-3 moves onto
+  // ONI-1's cell to extract the corpse afterwards.
+  require(sim.apply_command(wetware::CommandDeployOperative{
+              .syndicate_id = 2,
+              .operative_index = 0,
+              .building_id = 11,
+              .coord = wetware::GridCoord{8, 8, wetware::Stratum::Street}}),
+          "Deploy ONI-1 into Kowloon");
+  require(sim.apply_command(wetware::CommandDeployOperative{
+              .syndicate_id = 2,
+              .operative_index = 1,
+              .building_id = 11,
+              .coord = wetware::GridCoord{9, 8, wetware::Stratum::Street}}),
+          "Deploy ONI-2 into Kowloon");
+  require(sim.apply_command(wetware::CommandDeployOperative{
+              .syndicate_id = 1,
+              .operative_index = 2,
+              .building_id = 11,
+              .coord = wetware::GridCoord{8, 8, wetware::Stratum::Street}}),
+          "Deploy NULL-3 onto ONI-1's cell");
 
   require(
       sim.apply_command(wetware::CommandFireOrdinance{
@@ -245,6 +266,8 @@ void test_ordinance_strike_and_corpse_wetware_extraction() {
   require(!rival->squad.at(0).alive, "Rival operative ONI-1 is slain");
   require(sim.find_district(1)->corpse_drops.size() == 1,
           "Corpse hardware drop spawned at (8, 8, Street)");
+  require(player->squad.at(2).alive && player->squad.at(2).health == 100,
+          "Attacker's own squadmate on the target cell is not hit");
 
   require(sim.apply_command(wetware::CommandExtractCorpseSalvage{
               .syndicate_id = 1, .operative_index = 2, .district_id = 1}),
@@ -276,6 +299,12 @@ void test_thrall_directives_and_monorail_wreck_loot() {
   player->squad.at(0).set_organ_tier(wetware::OrganSlot::Brain,
                                      wetware::CyberTier::V4);
   player->squad.at(0).sliders.intelligence = 1.0;
+  require(sim.apply_command(wetware::CommandDeployOperative{
+              .syndicate_id = 1,
+              .operative_index = 0,
+              .building_id = 20,
+              .coord = wetware::GridCoord{5, 5, wetware::Stratum::Spire}}),
+          "Deploy KESTREL-1 into Shinjuku (District 2)");
 
   require(sim.attempt_persuade(1, 0, 7002, wetware::PersuadeTargetClass::Police,
                                2, wetware::Stratum::Street,
@@ -386,196 +415,169 @@ void test_full_ops_tactical_sweep() {
           "Combined Convoy + Monorail sweep credits and salvage recorded");
 }
 
+std::size_t count_events(const wetware::MegacitySimulation& sim,
+                         wetware::SimEventKind kind) {
+  std::size_t n = 0;
+  for (const auto& ev : sim.events()) {
+    if (ev.kind == kind) ++n;
+  }
+  return n;
+}
+
+const wetware::OperativeState& op_by_id(const wetware::MegacitySimulation& sim,
+                                        wetware::SyndicateId syn,
+                                        std::size_t index) {
+  return sim.find_syndicate(syn)->squad.at(index);
+}
+
 void test_strategy_a_shepherd_human_shield_persuasion() {
   auto sim = wetware::create_default_vertical_slice();
-  auto* player = sim.find_syndicate_mut(1);
-  auto* zaibatsu = sim.find_syndicate_mut(2);
-  require(player != nullptr && zaibatsu != nullptr,
-          "Player and Zaibatsu exist");
+  const auto focus = wetware::run_scenario("shepherd", sim);
+  require(focus == wetware::DistrictId{2}, "Shepherd focuses Shinjuku");
 
-  // Deploy NULL-3 (Operative 2) with V4 Brain + 0.90 Intelligence to Shinjuku
-  // (District 2) at (8, 8, Street)
-  auto& null_op = player->squad.at(2);
-  null_op.set_organ_tier(wetware::OrganSlot::Brain, wetware::CyberTier::V4);
-  null_op.sliders.intelligence = 0.90;
-  null_op.grid_pos = wetware::GridCoord{8, 8, wetware::Stratum::Street};
-
-  // Assemble a 14-civilian Escort human-shield ring + 2 Corporate Guards
-  for (std::uint32_t cid = 8001; cid <= 8014; ++cid) {
-    require(sim.attempt_persuade(
-                1, 2, cid, wetware::PersuadeTargetClass::Civilian, 2,
-                wetware::Stratum::Street, wetware::ThrallDirective::Escort),
-            "Persuade Civilian into Escort human-shield ring");
-  }
-  require(sim.attempt_persuade(
-              1, 2, 8101, wetware::PersuadeTargetClass::CorporateGuard, 2,
-              wetware::Stratum::Street, wetware::ThrallDirective::Escort),
-          "Chain-persuade Corporate Guard 1");
-  require(sim.attempt_persuade(
-              1, 2, 8102, wetware::PersuadeTargetClass::CorporateGuard, 2,
-              wetware::Stratum::Street, wetware::ThrallDirective::Escort),
-          "Chain-persuade Corporate Guard 2");
-  require(player->thralls.size() == 16,
-          "16 total thralls in NULL-3 neural mesh");
-
-  // Zaibatsu fires 3 heavy bursts at NULL-3's position (8, 8, Street);
-  // 3 civilian Escort thralls intercept the bullets so NULL-3 takes 0 damage
-  for (const auto wpn :
-       {wetware::WeaponId::Minigun, wetware::WeaponId::SuppressedGauss,
-        wetware::WeaponId::PlasmaLance}) {
-    require(sim.apply_command(wetware::CommandFireOrdinance{
-                .attacker_syndicate_id = 2,
-                .operative_index = 1,
-                .district_id = 2,
-                .weapon = wpn,
-                .target_coord =
-                    wetware::GridCoord{8, 8, wetware::Stratum::Street}}),
-            "Zaibatsu fires ballistic burst at NULL-3");
-  }
+  const auto& null_op = op_by_id(sim, 1, 2);
+  require(sim.operative_district(null_op) == 2,
+          "NULL-3 is physically deployed in Shinjuku");
   require(null_op.alive && null_op.health == 100,
-          "Civilian human-shield ring intercepts all 3 bursts; NULL-3 stays at "
-          "100 HP");
-  require(player->thralls.size() == 13,
-          "Exactly 3 Escort thralls were consumed intercepting enemy fire");
-
-  // Remaining neural-mesh bandwidth (>110) hijacks rival operative ONI-1 (201)
-  require(sim.persuadertron_bandwidth(1, 2) >=
-              wetware::MegacitySimulation::persuade_threshold(
-                  wetware::PersuadeTargetClass::RivalOperative),
-          "Snowballed thrall mesh exceeds RivalOperative threshold (110)");
-  require(sim.attempt_persuade(
-              1, 2, 201, wetware::PersuadeTargetClass::RivalOperative, 2,
-              wetware::Stratum::Street, wetware::ThrallDirective::Escort),
-          "Hijack rival operative ONI-1 via Persuadertron neural mesh");
-  require(!zaibatsu->squad.at(0).alive,
-          "Hijacked rival operative ONI-1 is removed from Zaibatsu active "
-          "squad");
-
-  // Capture Shinjuku Broadcast Spire intact (scorched_earth = false)
-  const auto raid = sim.resolve_district_raid(1, 2, false);
-  require(raid.attacker_won &&
-              sim.find_building(20)->state == wetware::BuildingState::Intact,
-          "Shepherd doctrine captures Shinjuku Broadcast Spire 100% intact");
-  require(sim.controls_intact_organ(1, wetware::CityOrgan::BroadcastSpire),
-          "EuroCorp immediately gains intact Broadcast Spire 2x bandwidth "
-          "bonus");
+          "Escort ring absorbs all 3 bursts; NULL-3 stays at 100 HP");
+  require(count_events(sim, wetware::SimEventKind::ShotFired) == 3 &&
+              count_events(sim, wetware::SimEventKind::ShieldIntercept) == 3 &&
+              count_events(sim, wetware::SimEventKind::OperativeHit) == 0,
+          "3 shots fired, 3 shield intercepts, 0 hits");
+  // 14 civilians + 2 guards + hijacked ONI-1 = 17, minus 3 consumed shields.
+  require(sim.find_syndicate(1)->thralls.size() == 14,
+          "Thrall mesh: 17 recruited - 3 consumed = 14");
+  require(!op_by_id(sim, 2, 0).alive &&
+              count_events(sim, wetware::SimEventKind::RivalHijacked) == 1,
+          "ONI-1 hijacked out of the Zaibatsu squad");
+  require(sim.find_district(2)->owner_syndicate == 1 &&
+              sim.find_building(20)->state == wetware::BuildingState::Intact &&
+              sim.controls_intact_organ(1, wetware::CityOrgan::BroadcastSpire),
+          "Shinjuku captured with the Broadcast Spire 100% intact");
+  require(count_events(sim, wetware::SimEventKind::BuildingCollapsed) == 0,
+          "No structure collapsed under the shepherd doctrine");
 }
 
 void test_strategy_b_scorched_earth_ordinance_fallout() {
-  auto sim = wetware::create_default_vertical_slice();
-
-  require(sim.calculate_district_daily_revenue(4) == 1050,
+  auto baseline = wetware::create_default_vertical_slice();
+  require(baseline.calculate_district_daily_revenue(4) == 1050,
           "Intact Neo-Ruhr Ordinance Foundry yields 1050 CR/day");
-  require(sim.effective_research_cost(2, 2) == 840,
-          "Intact Ordinance Foundry grants -65% heavy weapon R&D cost (840)");
+  require(baseline.effective_research_cost(2, 2) == 840,
+          "Owner gets -65% heavy weapon R&D cost (2400 -> 840)");
 
-  // EuroCorp assaults District 4 (Neo-Ruhr) with scorched-earth heavy ordinance
-  for (auto& op : sim.find_syndicate_mut(1)->squad) {
-    for (const auto slot :
-         {wetware::OrganSlot::Legs, wetware::OrganSlot::Arms,
-          wetware::OrganSlot::Chest, wetware::OrganSlot::Eyes,
-          wetware::OrganSlot::Brain, wetware::OrganSlot::Heart}) {
-      op.set_organ_tier(slot, wetware::CyberTier::V3);
+  auto sim = wetware::create_default_vertical_slice();
+  const auto focus = wetware::run_scenario("scorched_earth", sim);
+  require(focus == wetware::DistrictId{4}, "Scorched earth focuses Neo-Ruhr");
+  require(sim.find_building(40)->state == wetware::BuildingState::Rubble &&
+              count_events(sim, wetware::SimEventKind::BuildingCollapsed) == 1,
+          "Ordinance Foundry collapses exactly once into rubble");
+  require(count_events(sim, wetware::SimEventKind::OrbitalStrike) == 1,
+          "Satellite Rain strike recorded");
+  require(sim.find_district(4)->owner_syndicate == 2,
+          "Scorched earth destroys rather than captures");
+  require(sim.calculate_district_daily_revenue(4) == 0,
+          "Rubble pays 0 CR/day (1050 -> 0) until rebuilt");
+  require(sim.effective_research_cost(2, 2) == 2400 &&
+              sim.effective_research_cost(1, 2) == 2400,
+          "Nobody keeps the -65% Ordinance discount while it is rubble");
+  for (const auto& syn_id : {2U, 3U}) {
+    for (const auto& op : sim.find_syndicate(syn_id)->squad) {
+      require(op.alive && op.health == 100,
+              "Orbital strike in District 4 does not touch other districts");
     }
   }
-  const auto raid = sim.resolve_district_raid(1, 4, true);
-  require(raid.attacker_won && raid.buildings_collapsed >= 1,
-          "Scorched-earth assault collapses Neo-Ruhr Ordinance Foundry");
-  require(sim.find_building(40)->state == wetware::BuildingState::Rubble,
-          "Building 40 (Ordinance Foundry) is reduced to Rubble");
-  require(sim.calculate_district_daily_revenue(4) == 0,
-          "Rubble penalty crushes Neo-Ruhr daily revenue to 0 CR/day (1050 -> "
-          "0)");
-  require(!sim.controls_intact_organ(1, wetware::CityOrgan::OrdinanceFoundry) &&
-              sim.effective_research_cost(1, 2) == 2400,
-          "Destroyed Ordinance Foundry provides zero R&D discount until "
-          "rebuilt");
 }
 
 void test_strategy_c_three_syndicate_three_stratum_convergence() {
   auto sim = wetware::create_default_vertical_slice();
-  require(sim.find_syndicate(3) != nullptr && sim.find_syndicate(4) != nullptr,
-          "All 4 Syndicates (EuroCorp, Zaibatsu, Chiba Triad, Omni-Directive) "
-          "present");
-  require(sim.find_district(6) != nullptr, "All 6 Megacity Districts present");
+  const auto focus = wetware::run_scenario("three_way_clash", sim);
+  require(focus == wetware::DistrictId{1}, "Clash focuses Kowloon");
 
-  auto* euro = sim.find_syndicate_mut(1);
-  auto* zaibatsu = sim.find_syndicate_mut(2);
-  auto* triad = sim.find_syndicate_mut(3);
-
-  // Position Zaibatsu ONI-3 (203) and Chiba Triad VIPER-1 (301) on Spire
-  // skybridge at (6, 4, Spire) in District 1
-  zaibatsu->squad.at(2).grid_pos =
-      wetware::GridCoord{6, 4, wetware::Stratum::Spire};
-  zaibatsu->squad.at(2).current_stratum = wetware::Stratum::Spire;
-  triad->squad.at(0).grid_pos =
-      wetware::GridCoord{6, 4, wetware::Stratum::Spire};
-  triad->squad.at(0).current_stratum = wetware::Stratum::Spire;
-
-  // EuroCorp breaches the Spire skybridge slab at (6, 4, Spire), dropping both
-  // rival squads' Spire operatives down to Street with fall impact damage
-  require(sim.apply_command(wetware::CommandBreachFloorSlab{
-              .district_id = 1,
-              .coord = wetware::GridCoord{6, 4, wetware::Stratum::Spire}}),
-          "Breach Spire skybridge under dueling Zaibatsu & Chiba Triad "
-          "operatives");
-  require(zaibatsu->squad.at(2).current_stratum == wetware::Stratum::Street &&
-              zaibatsu->squad.at(2).health < 100 &&
-              triad->squad.at(0).current_stratum == wetware::Stratum::Street &&
-              triad->squad.at(0).health < 100,
-          "Both rival Spire operatives plummet to Street and take fall damage "
-          "(mitigated by cyber-legs)");
-
-  // Equip VEX-2 (Operative 1 at (2, 2, Street)) with V3 Legs and NULL-3 with
-  // V3 Heart, then redline Adrenaline Overclock until VEX-2 suffers Cardiac
-  // Flatline
-  auto& vex = euro->squad.at(1);
-  vex.set_organ_tier(wetware::OrganSlot::Legs, wetware::CyberTier::V3);
-  vex.sliders.adrenaline = 1.0;
-  euro->squad.at(2).set_organ_tier(wetware::OrganSlot::Heart,
-                                   wetware::CyberTier::V3);
-  require(sim.apply_command(wetware::CommandTriggerOverclock{.syndicate_id = 1,
-                                                             .active = true}),
-          "Activate Adrenaline Overclock during 3-syndicate firefight");
-  for (int t = 0; t < 6 && vex.alive; ++t) {
-    sim.step_tick();
+  // Every syndicate has operatives in the sector, on all three strata.
+  bool strata_seen[3] = {false, false, false};
+  for (wetware::SyndicateId syn = 1; syn <= 4; ++syn) {
+    bool present = false;
+    for (const auto& op : sim.find_syndicate(syn)->squad) {
+      if (sim.operative_district(op) == 1) {
+        present = true;
+        strata_seen[static_cast<int>(op.current_stratum)] = true;
+      }
+    }
+    require(present, "All 4 syndicates deployed in Kowloon");
   }
-  require(!vex.alive &&
-              vex.medical_status == wetware::MedicalStatus::CardiacFlatline,
-          "VEX-2 flatlines after sustained redlined Adrenaline Overclock");
-  require(euro->squad.at(2).alive,
-          "NULL-3 survives Overclock thanks to V3 Cyber-Heart");
-  require(!sim.find_district(1)->corpse_drops.empty(),
-          "Flatlined VEX-2 spawns harvestable cyber-organ drop at (2, 2, "
-          "Street)");
+  require(strata_seen[0] && strata_seen[1] && strata_seen[2],
+          "Operatives present on Under-Grid, Street, and Spire");
+  require(count_events(sim, wetware::SimEventKind::OperativeDeployed) == 12,
+          "11 convergence deployments + NULL-3 moving onto the corpse");
 
-  // Squadmate NULL-3 moves to (2, 2, Street) and extracts VEX-2's V3 chrome
-  euro->squad.at(2).grid_pos =
-      wetware::GridCoord{2, 2, wetware::Stratum::Street};
-  euro->squad.at(2).current_stratum = wetware::Stratum::Street;
-  const std::size_t salvage_before = euro->cryo_vault_salvage.size();
-  require(sim.apply_command(wetware::CommandExtractCorpseSalvage{
-              .syndicate_id = 1, .operative_index = 2, .district_id = 1}),
-          "NULL-3 harvests fallen squadmate VEX-2's V3 cyber-organs");
-  require(euro->cryo_vault_salvage.size() >= salvage_before,
-          "Recovered V3 Legs stored in EuroCorp Cryo-Vault");
+  // Skybridge breach: exactly 2 falls of 30 - 5*legs(V1) = 25 HP.
+  std::size_t falls = 0;
+  for (const auto& ev : sim.events()) {
+    if (ev.kind == wetware::SimEventKind::FallDamage) {
+      ++falls;
+      require(ev.value == 25 && ev.to.stratum == wetware::Stratum::Street,
+              "Each V1-legged operative falls to Street for exactly 25 HP");
+    }
+  }
+  require(falls == 2, "ONI-3 and VIPER-1 both drop through the breach");
 
-  // Thaw replacement meat-puppet VORTEX-2 into slot 1 and bolt the recovered
-  // V3 Legs onto him
-  require(
-      sim.apply_command(wetware::CommandThawCryoReplacement{
-          .syndicate_id = 1, .operative_index = 1, .new_callsign = "VORTEX-2"}),
-      "Thaw fresh cortical meat-puppet VORTEX-2 from Cryo-Stasis");
-  require(vex.alive && vex.health == 100 && vex.callsign == "VORTEX-2",
-          "Replacement meat-puppet VORTEX-2 is active at 100 HP");
-  require(
-      sim.apply_command(wetware::CommandUseSalvage{.syndicate_id = 1,
-                                                   .blueprint_id = 1,
-                                                   .reverse_engineer = false,
-                                                   .operative_index = 1}),
-      "Bolt harvested V3 Myomer Reflex Legs onto replacement VORTEX-2");
-  require(vex.organ_tier(wetware::OrganSlot::Legs) == wetware::CyberTier::V3,
-          "VORTEX-2 now wears the harvested V3 Legs");
+  // Crossfire outcomes (exact): ONI-3, ONI-1, VIPER-1 killed; VIPER-3 at 55.
+  require(!op_by_id(sim, 2, 2).alive && !op_by_id(sim, 2, 0).alive &&
+              !op_by_id(sim, 3, 0).alive,
+          "ONI-3, ONI-1, VIPER-1 killed in the crossfire");
+  require(op_by_id(sim, 3, 2).alive && op_by_id(sim, 3, 2).health == 55,
+          "VIPER-3 survives the minigun burst at exactly 55 HP");
+  require(count_events(sim, wetware::SimEventKind::OperativeKilled) == 3,
+          "Exactly 3 combat kills");
+
+  // Overclock flatline is targeted: only VEX-2 dies; nominal squadmates live.
+  require(count_events(sim, wetware::SimEventKind::CardiacFlatline) == 1,
+          "Exactly one cardiac flatline (VEX-2)");
+  require(op_by_id(sim, 1, 0).alive && op_by_id(sim, 1, 3).alive,
+          "KESTREL-1 and CHROME-4 were not overclocked and survive");
+  require(op_by_id(sim, 1, 2).alive && op_by_id(sim, 1, 2).medical_status ==
+                                           wetware::MedicalStatus::Nominal,
+          "NULL-3 survives the overclock on its V3 Cyber-Heart");
+
+  // Harvest -> thaw -> refit.
+  require(count_events(sim, wetware::SimEventKind::SalvageExtracted) == 1 &&
+              count_events(sim, wetware::SimEventKind::CryoThaw) == 1,
+          "VEX-2's chrome harvested and a replacement thawed");
+  const auto& vortex = op_by_id(sim, 1, 1);
+  require(vortex.alive && vortex.callsign == "VORTEX-2" &&
+              vortex.organ_tier(wetware::OrganSlot::Legs) ==
+                  wetware::CyberTier::V3,
+          "VORTEX-2 is active wearing the harvested V3 Legs");
+}
+
+void test_combat_is_scoped_to_districts() {
+  auto sim = wetware::create_default_vertical_slice();
+  // ONI-1 (District 2) and ONI-4 (District 3) both stand on grid (8, 8).
+  // A EuroCorp strike in Kowloon at (8, 8) must not touch either of them.
+  require(sim.apply_command(wetware::CommandDeployOperative{
+              .syndicate_id = 1,
+              .operative_index = 1,
+              .building_id = 10,
+              .coord = {3, 3, wetware::Stratum::Street}}),
+          "Deploy VEX-2 in Kowloon");
+  require(sim.apply_command(wetware::CommandFireOrdinance{
+              .attacker_syndicate_id = 1,
+              .operative_index = 1,
+              .district_id = 1,
+              .weapon = wetware::WeaponId::SatelliteRain,
+              .target_coord = {8, 8, wetware::Stratum::Street}}),
+          "Satellite Rain on Kowloon (8, 8)");
+  for (const auto& op : sim.find_syndicate(2)->squad) {
+    require(op.alive, "Zaibatsu operatives in other districts are untouched");
+  }
+  // An operative cannot fire into a district it is not deployed in.
+  require(!sim.apply_command(wetware::CommandFireOrdinance{
+              .attacker_syndicate_id = 1,
+              .operative_index = 1,
+              .district_id = 2,
+              .weapon = wetware::WeaponId::Minigun,
+              .target_coord = {8, 8, wetware::Stratum::Street}}),
+          "Cannot fire into a district the shooter is not in");
 }
 
 } // namespace
@@ -594,6 +596,7 @@ int main() {
   test_strategy_a_shepherd_human_shield_persuasion();
   test_strategy_b_scorched_earth_ordinance_fallout();
   test_strategy_c_three_syndicate_three_stratum_convergence();
+  test_combat_is_scoped_to_districts();
   std::cout << "All wetware C++23 simulation tests passed.\n";
   return 0;
 }
