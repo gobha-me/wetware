@@ -70,10 +70,15 @@ func _initialize() -> void:
 
 	for actor_node_name in ["OperativeKestrel1", "OperativeVex2", "OperativeNull3", "OperativeChrome4", "CorpSecGuard1", "CorpSecGuard2", "MegacityCivilian1", "MegacityCivilian2"]:
 		var anode := sector.get_node_or_null(actor_node_name) as Sprite2D
-		if anode == null or anode.hframes != 8 or anode.texture == null:
-			push_error("Missing or misconfigured 8-directional character sprite node: %s" % actor_node_name)
+		if anode == null or anode.hframes != 8 or anode.vframes != 4 or anode.texture == null:
+			push_error("Missing or misconfigured 8x4 multi-pose character sprite node: %s" % actor_node_name)
 			quit(1)
 			return
+
+	if sector._city_buildings.size() < 10 or sector._proc_civilians.size() != 10 or sector._puppet_identities.size() != 4:
+		push_error("M7 dense city blocks, procedural civilian crowd, or cortical meat-puppet roster not initialized")
+		quit(1)
+		return
 
 	var portrait_rect := sector.get_node_or_null("TacticalHud/PortraitRect") as TextureRect
 	if portrait_rect == null or portrait_rect.texture == null:

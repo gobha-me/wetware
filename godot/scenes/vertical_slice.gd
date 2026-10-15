@@ -27,6 +27,13 @@ const OPERATIVE_SHORT := [
 	"4:CHROME",
 ]
 
+const OPERATIVE_SEX := [
+	"F",
+	"M",
+	"F",
+	"M",
+]
+
 const OPERATIVE_ORGANS := [
 	"V3 EYES | V3 BRAIN | V2 LEGS",
 	"V3 ARMS | V3 CHEST | V2 HEART",
@@ -34,11 +41,44 @@ const OPERATIVE_ORGANS := [
 	"V4 CHEST | V3 LEGS | V3 ARMS",
 ]
 
-const PORTRAIT_PATHS := [
+const PORTRAIT_POOL_PATHS := [
 	"res://assets/sprites/portrait_kestrel_1.png",
 	"res://assets/sprites/portrait_vex_2.png",
 	"res://assets/sprites/portrait_null_3.png",
 	"res://assets/sprites/portrait_chrome_4.png",
+	"res://assets/sprites/portrait_cryo_f2.png",
+	"res://assets/sprites/portrait_cryo_m3.png",
+]
+
+const MEAT_PUPPET_CODENAMES_F := [
+	"KESTREL",
+	"NULL",
+	"CIPHER",
+	"MANTIS",
+	"VALKYRIE",
+	"NYX",
+]
+
+const MEAT_PUPPET_CODENAMES_M := [
+	"VEX",
+	"CHROME",
+	"RAZOR",
+	"WRAITH",
+	"VORTEX",
+	"SHARD",
+]
+
+const WIPED_SURNAMES := [
+	"V. CHEN",
+	"K. SATO",
+	"M. VOLKOV",
+	"D. MERCER",
+	"H. TAKAHASHI",
+	"R. KOWALSKI",
+	"S. NAKAMURA",
+	"J. VANCE",
+	"A. MORENO",
+	"T. LINDQVIST",
 ]
 
 const WEAPON_NAMES := [
@@ -55,6 +95,7 @@ const STRATUM_NAMES := {
 }
 
 const GRID_RADIUS := 16
+const STRIDE_ROWS := [1, 0, 2, 0]
 
 var active_stratum: Stratum = Stratum.STREET
 var selected_operative: int = 0
@@ -69,6 +110,7 @@ var thrall_count: int = 0
 var salvage_units: int = 1
 var syndicate_treasury: int = 6000
 var last_digest: String = "0x9f4a2c18e7b03d11"
+var cryo_generation: int = 0
 
 # Interactive VFX state rendered on foreground TacticalOverlay inside TacticalHud
 var move_target_pos: Vector2 = Vector2.ZERO
@@ -84,20 +126,50 @@ var target_pulse_timer: float = 0.0
 var demo_reel_active: bool = false
 var demo_frame: int = 0
 var demo_banner_text: String = ""
+var _portrait_pool: Array[Texture2D] = []
 var _portraits: Array[Texture2D] = []
+var _puppet_identities: Array[Dictionary] = []
 var _overlay: Node2D = null
 var _camera: Camera2D = null
 var _cam_target_pos: Vector2 = Vector2(640, 360)
 var _cam_target_zoom: float = 1.0
 
+# M7 Multi-Pose Animation, Procedural Crowd & Dense City Cutaway State
+var _actor_prev_pos: Dictionary = {}
+var _actor_walk_phase: Dictionary = {}
+var _actor_fire_timer: Dictionary = {}
+var _actor_facing_sector: Dictionary = {}
+var _city_buildings: Array[Sprite2D] = []
+var _building_alpha: Dictionary = {}
+var _occluded_actor_ids: Dictionary = {}
+var _proc_civilians: Array[Dictionary] = []
+var _m7_initialized: bool = false
+
+func _load_tex(res_path: String) -> Texture2D:
+	var abs_path := ProjectSettings.globalize_path(res_path)
+	if FileAccess.file_exists(abs_path):
+		var img := Image.load_from_file(abs_path)
+		if img != null and not img.is_empty():
+			return ImageTexture.create_from_image(img)
+	return load(res_path) as Texture2D
+
+func _ensure_m7_initialized() -> void:
+	if _m7_initialized:
+		return
+	_m7_initialized = true
+	for p in PORTRAIT_POOL_PATHS:
+		_portrait_pool.append(_load_tex(p))
+	_rebuild_meat_puppet_roster()
+	_configure_multi_pose_actors()
+	_populate_sector_grid()
+
 func _ready() -> void:
-	for p in PORTRAIT_PATHS:
-		var tex := load(p) as Texture2D
-		_portraits.append(tex)
+	_ensure_m7_initialized()
 	_setup_camera()
 	_setup_tactical_overlay()
-	_populate_sector_grid()
 	_apply_stratum_cutaway(active_stratum)
+	_update_actor_animations_and_depth(0.016)
+	_update_building_proximity_cutaway(1.0)
 	_update_operative_card()
 	_refresh_hud()
 	if "--demo-reel" in OS.get_cmdline_user_args():
@@ -110,6 +182,111 @@ func _ready() -> void:
 		set_tower_collapsed(true)
 		set_tower_collapsed(false)
 		print("wetware Godot 4.7.2 Kowloon Bio-Foundry 3-stratum vertical slice verified cleanly.")
+
+func _rebuild_meat_puppet_roster() -> void:
+	_puppet_identities.clear()
+	_portraits.clear()
+	for i in range(4):
+		var sex: String = OPERATIVE_SEX[i]
+		var idx: int = (i + cryo_generation)
+		var codename: String = (
+			MEAT_PUPPET_CODENAMES_F[(i / 2 + cryo_generation) % MEAT_PUPPET_CODENAMES_F.size()]
+			if sex == "F"
+			else MEAT_PUPPET_CODENAMES_M[(i / 2 + cryo_generation) % MEAT_PUPPET_CODENAMES_M.size()]
+		)
+		var serial_num: int = 104 + ((idx * 217 + i * 83) % 880)
+		var wiped_name: String = WIPED_SURNAMES[(idx * 3 + i * 2) % WIPED_SURNAMES.size()]
+		var link_val: float = 98.4 + float((idx + i) % 15) * 0.1
+		var p_idx: int = i
+		if cryo_generation > 0:
+			p_idx = (4 if (sex == "F" and (cryo_generation + i) % 2 == 1) else (5 if (sex == "M" and (cryo_generation + i) % 2 == 1) else i))
+		_portraits.append(_portrait_pool[clampi(p_idx, 0, _portrait_pool.size() - 1)])
+		_puppet_identities.append({
+			"unit_code": "UNIT 0%d-%s // %s" % [i + 1, sex, codename],
+			"short_tag": "%d:%s-%s" % [i + 1, codename.substr(0, 6), sex],
+			"subj_line": "SUBJ #%d [%s]" % [serial_num, wiped_name],
+			"link_str": "%.1f%%" % link_val,
+			"sex": sex,
+		})
+
+func _configure_multi_pose_actors() -> void:
+	var fem_op_alb := _load_tex("res://assets/sprites/operative_female_albedo.png")
+	var fem_op_emi := _load_tex("res://assets/sprites/operative_female_emissive.png")
+	var fem_op_nrm := _load_tex("res://assets/normals/operative_female_normal.png")
+	var male_op_alb := _load_tex("res://assets/sprites/operative_trenchcoat_albedo.png")
+	var male_op_emi := _load_tex("res://assets/sprites/operative_trenchcoat_emissive.png")
+	var male_op_nrm := _load_tex("res://assets/normals/operative_trenchcoat_normal.png")
+
+	for i in range(OPERATIVE_NODES.size()):
+		var op := get_node_or_null(OPERATIVE_NODES[i]) as Sprite2D
+		if op == null:
+			continue
+		op.hframes = 8
+		op.vframes = 4
+		var is_fem: bool = (String(OPERATIVE_SEX[i]) == "F")
+		op.texture = fem_op_alb if is_fem else male_op_alb
+		if op.material is ShaderMaterial:
+			var smat := (op.material as ShaderMaterial).duplicate() as ShaderMaterial
+			smat.set_shader_parameter("sheet_vframes", 4)
+			smat.set_shader_parameter("emissive_mask", fem_op_emi if is_fem else male_op_emi)
+			smat.set_shader_parameter("normal_map", fem_op_nrm if is_fem else male_op_nrm)
+			op.material = smat
+		_actor_prev_pos[op.get_instance_id()] = op.position
+		_actor_facing_sector[op.get_instance_id()] = op.frame % 8
+
+	var guard_alb := _load_tex("res://assets/sprites/corp_sec_guard_albedo.png")
+	var guard_emi := _load_tex("res://assets/sprites/corp_sec_guard_emissive.png")
+	var guard_nrm := _load_tex("res://assets/normals/corp_sec_guard_normal.png")
+	for g_name in ["CorpSecGuard1", "CorpSecGuard2"]:
+		var g := get_node_or_null(g_name) as Sprite2D
+		if g == null:
+			continue
+		g.hframes = 8
+		g.vframes = 4
+		g.texture = guard_alb
+		if g.material is ShaderMaterial:
+			var smat := (g.material as ShaderMaterial).duplicate() as ShaderMaterial
+			smat.set_shader_parameter("sheet_vframes", 4)
+			smat.set_shader_parameter("emissive_mask", guard_emi)
+			smat.set_shader_parameter("normal_map", guard_nrm)
+			g.material = smat
+		_actor_prev_pos[g.get_instance_id()] = g.position
+		_actor_facing_sector[g.get_instance_id()] = g.frame % 8
+
+	var civ_m_alb := _load_tex("res://assets/sprites/megacity_civilian_albedo.png")
+	var civ_m_emi := _load_tex("res://assets/sprites/megacity_civilian_emissive.png")
+	var civ_m_nrm := _load_tex("res://assets/normals/megacity_civilian_normal.png")
+	var civ_f_alb := _load_tex("res://assets/sprites/megacity_civilian_f_albedo.png")
+	var civ_f_emi := _load_tex("res://assets/sprites/megacity_civilian_f_emissive.png")
+	var civ_f_nrm := _load_tex("res://assets/normals/megacity_civilian_f_normal.png")
+
+	var civ1 := get_node_or_null("MegacityCivilian1") as Sprite2D
+	if civ1:
+		civ1.hframes = 8
+		civ1.vframes = 4
+		civ1.texture = civ_m_alb
+		if civ1.material is ShaderMaterial:
+			var smat := (civ1.material as ShaderMaterial).duplicate() as ShaderMaterial
+			smat.set_shader_parameter("sheet_vframes", 4)
+			smat.set_shader_parameter("emissive_mask", civ_m_emi)
+			smat.set_shader_parameter("normal_map", civ_m_nrm)
+			civ1.material = smat
+		_actor_prev_pos[civ1.get_instance_id()] = civ1.position
+		_actor_facing_sector[civ1.get_instance_id()] = civ1.frame % 8
+
+	var civ2 := get_node_or_null("MegacityCivilian2") as Sprite2D
+	if civ2:
+		civ2.hframes = 8
+		civ2.vframes = 4
+		civ2.texture = civ_f_alb
+		if civ2.material is ShaderMaterial:
+			var smat := (civ2.material as ShaderMaterial).duplicate() as ShaderMaterial
+			smat.set_shader_parameter("sheet_vframes", 4)
+			smat.set_shader_parameter("emissive_mask", civ_f_emi)
+			smat.set_shader_parameter("normal_map", civ_f_nrm)
+			civ2.material = smat
+		_actor_prev_pos[civ2.get_instance_id()] = civ2.position
+		_actor_facing_sector[civ2.get_instance_id()] = civ2.frame % 8
 
 func _setup_camera() -> void:
 	_camera = Camera2D.new()
@@ -200,6 +377,7 @@ func _populate_sector_grid() -> void:
 	var floor_root := get_node_or_null("SectorFloorTiles") as Node2D
 	if floor_root == null or floor_root.get_child_count() > 0:
 		return
+	floor_root.z_index = -2000
 	var under_tpl := get_node_or_null("UnderGridCatwalk") as Sprite2D
 	var street_tpl := get_node_or_null("StreetTileRoot") as Sprite2D
 	var spire_tpl := get_node_or_null("SpireSkybridge") as Sprite2D
@@ -242,8 +420,9 @@ func _populate_sector_grid() -> void:
 				sp_tile.set_meta("stratum", 2)
 				floor_root.add_child(sp_tile)
 
-	# Populate secondary buildings, checkpoints, vehicles & props across neighboring city blocks
+	# Populate dense multi-building city blocks, procedural M/F civilian population & street props
 	_populate_surrounding_city_blocks(floor_root)
+	_spawn_procedural_civilian_crowd()
 
 func _populate_surrounding_city_blocks(floor_root: Node2D) -> void:
 	var tower_tpl := get_node_or_null("BioFoundryTowerIntact") as Sprite2D
@@ -258,22 +437,58 @@ func _populate_surrounding_city_blocks(floor_root: Node2D) -> void:
 	if tower_tpl == null:
 		return
 
-	# 4 Flanking Corporate Sub-Towers on the neighboring 4 city block plazas ((±6, ±6))
-	var block_centers := [
-		Vector2(-6, -6),
-		Vector2(6, -6),
-		Vector2(-6, 6),
-		Vector2(6, 6),
+	if tower_tpl.material is ShaderMaterial:
+		tower_tpl.material = (tower_tpl.material as ShaderMaterial).duplicate()
+	_city_buildings.append(tower_tpl)
+	_building_alpha[tower_tpl.get_instance_id()] = 1.0
+
+	var ten_alb := _load_tex("res://assets/tiles/city_block_tenement_albedo.png")
+	var ten_emi := _load_tex("res://assets/tiles/city_block_tenement_emissive.png")
+	var ten_nrm := _load_tex("res://assets/normals/city_block_tenement_normal.png")
+	var corp_alb := _load_tex("res://assets/tiles/city_block_corp_albedo.png")
+	var corp_emi := _load_tex("res://assets/tiles/city_block_corp_emissive.png")
+	var corp_nrm := _load_tex("res://assets/normals/city_block_corp_normal.png")
+
+	# Dense city blocks surrounding the avenues (including foreground blocks that trigger proximity cutaway)
+	var dense_blocks := [
+		# Inner foreground & flanking blocks right across the avenues from Bio-Foundry
+		[Vector2(1.4, 4.2), true, 0.88],
+		[Vector2(4.2, 1.4), false, 0.90],
+		[Vector2(-1.6, 4.2), false, 0.86],
+		[Vector2(4.2, -1.6), true, 0.86],
+		[Vector2(-4.2, 1.6), true, 0.88],
+		[Vector2(-1.6, -4.2), false, 0.86],
+		# Mid-block high-density Kowloon tenements & corporate arcologies
+		[Vector2(4.6, 4.6), false, 0.96],
+		[Vector2(-4.6, 4.6), true, 0.94],
+		[Vector2(4.6, -4.6), true, 0.94],
+		[Vector2(-4.6, -4.6), false, 0.96],
+		[Vector2(6.5, 6.5), true, 0.92],
+		[Vector2(-6.5, 6.5), false, 0.92],
+		[Vector2(6.5, -6.5), false, 0.92],
+		[Vector2(-6.5, -6.5), true, 0.92],
 	]
-	for bc in block_centers:
+
+	for b_spec in dense_blocks:
+		var bc: Vector2 = b_spec[0]
+		var is_tenement: bool = b_spec[1]
+		var b_scale: float = b_spec[2]
 		var iso := Vector2((bc.x - bc.y) * 64.0, (bc.x + bc.y) * 32.0)
-		var sub_tower := Sprite2D.new()
-		sub_tower.texture = tower_tpl.texture
-		sub_tower.material = tower_tpl.material
-		sub_tower.position = Vector2(640, 298) + iso
-		sub_tower.scale = Vector2(0.82, 0.82)
-		sub_tower.set_meta("stratum", 1)
-		floor_root.add_child(sub_tower)
+		var b_node := Sprite2D.new()
+		b_node.texture = ten_alb if is_tenement else corp_alb
+		if tower_tpl.material is ShaderMaterial:
+			var bmat := (tower_tpl.material as ShaderMaterial).duplicate() as ShaderMaterial
+			bmat.set_shader_parameter("emissive_mask", ten_emi if is_tenement else corp_emi)
+			bmat.set_shader_parameter("normal_map", ten_nrm if is_tenement else corp_nrm)
+			bmat.set_shader_parameter("building_cutaway_alpha", 1.0)
+			b_node.material = bmat
+		b_node.position = Vector2(640, 310) + iso
+		b_node.scale = Vector2(b_scale, b_scale)
+		b_node.z_index = int(b_node.position.y + 42.0)
+		b_node.set_meta("stratum", 1)
+		add_child(b_node)
+		_city_buildings.append(b_node)
+		_building_alpha[b_node.get_instance_id()] = 1.0
 
 	# Perimeter vehicles & infrastructure across the outer avenues
 	var extra_props := [
@@ -308,6 +523,68 @@ func _populate_surrounding_city_blocks(floor_root: Node2D) -> void:
 		p.position = Vector2(640, base_y) + iso * scale_iso
 		p.set_meta("stratum", st)
 		floor_root.add_child(p)
+
+func _grid_to_street_pos(gx: float, gy: float) -> Vector2:
+	return Vector2(640.0 + (gx - gy) * 64.0, 376.0 + (gx + gy) * 32.0)
+
+func _spawn_procedural_civilian_crowd() -> void:
+	var civ1_tpl := get_node_or_null("MegacityCivilian1") as Sprite2D
+	if civ1_tpl == null or not (civ1_tpl.material is ShaderMaterial):
+		return
+	var civ_m_alb := _load_tex("res://assets/sprites/megacity_civilian_albedo.png")
+	var civ_m_emi := _load_tex("res://assets/sprites/megacity_civilian_emissive.png")
+	var civ_m_nrm := _load_tex("res://assets/normals/megacity_civilian_normal.png")
+	var civ_f_alb := _load_tex("res://assets/sprites/megacity_civilian_f_albedo.png")
+	var civ_f_emi := _load_tex("res://assets/sprites/megacity_civilian_f_emissive.png")
+	var civ_f_nrm := _load_tex("res://assets/normals/megacity_civilian_f_normal.png")
+
+	# 12 Procedural M/F Civilians with shader palette remapping (jacket, pants, skin, hair)
+	var crowd_specs := [
+		[true, Vector2(-2.6, 2.8), Vector2(2.6, 2.8), 38.0, Vector3(0.95, 0.35, 0.25), Vector3(0.22, 0.28, 0.38), Vector3(1.02, 0.88, 0.78), Vector3(0.18, 0.15, 0.22)],
+		[false, Vector2(2.8, 2.6), Vector2(2.8, -2.6), 34.0, Vector3(0.25, 0.82, 0.95), Vector3(0.28, 0.22, 0.35), Vector3(0.82, 0.65, 0.52), Vector3(0.85, 0.28, 0.55)],
+		[true, Vector2(2.6, -2.8), Vector2(-2.6, -2.8), 40.0, Vector3(0.88, 0.76, 0.22), Vector3(0.18, 0.24, 0.28), Vector3(0.62, 0.45, 0.35), Vector3(0.15, 0.15, 0.18)],
+		[false, Vector2(-2.8, -2.6), Vector2(-2.8, 2.6), 36.0, Vector3(0.78, 0.28, 0.88), Vector3(0.20, 0.26, 0.34), Vector3(1.05, 0.92, 0.84), Vector3(0.25, 0.88, 0.72)],
+		[true, Vector2(0.4, 3.2), Vector2(3.4, 3.2), 42.0, Vector3(0.28, 0.88, 0.52), Vector3(0.24, 0.22, 0.28), Vector3(0.92, 0.76, 0.64), Vector3(0.45, 0.28, 0.18)],
+		[false, Vector2(3.2, 0.4), Vector2(3.2, 3.4), 35.0, Vector3(0.96, 0.48, 0.68), Vector3(0.18, 0.20, 0.30), Vector3(0.74, 0.56, 0.44), Vector3(0.92, 0.82, 0.32)],
+		[true, Vector2(-3.2, 0.4), Vector2(-3.2, 3.4), 37.0, Vector3(0.35, 0.58, 0.96), Vector3(0.26, 0.28, 0.32), Vector3(1.0, 0.86, 0.76), Vector3(0.22, 0.20, 0.24)],
+		[false, Vector2(-0.4, 3.2), Vector2(-3.4, 3.2), 39.0, Vector3(0.92, 0.58, 0.22), Vector3(0.20, 0.25, 0.32), Vector3(0.86, 0.70, 0.58), Vector3(0.68, 0.22, 0.32)],
+		[true, Vector2(0.0, 3.5), Vector2(0.0, 6.2), 36.0, Vector3(0.48, 0.88, 0.82), Vector3(0.22, 0.20, 0.28), Vector3(0.68, 0.50, 0.38), Vector3(0.18, 0.18, 0.22)],
+		[false, Vector2(3.5, 0.0), Vector2(6.2, 0.0), 38.0, Vector3(0.86, 0.32, 0.48), Vector3(0.24, 0.26, 0.36), Vector3(1.02, 0.90, 0.80), Vector3(0.32, 0.78, 0.95)],
+	]
+
+	for i in range(crowd_specs.size()):
+		var spec: Array = crowd_specs[i]
+		var is_fem: bool = spec[0]
+		var wp_a := _grid_to_street_pos(spec[1].x, spec[1].y)
+		var wp_b := _grid_to_street_pos(spec[2].x, spec[2].y)
+		var spd: float = spec[3]
+		var c_node := Sprite2D.new()
+		c_node.name = "ProcCivilian_%d" % i
+		c_node.hframes = 8
+		c_node.vframes = 4
+		c_node.texture = civ_f_alb if is_fem else civ_m_alb
+		var smat := (civ1_tpl.material as ShaderMaterial).duplicate() as ShaderMaterial
+		smat.set_shader_parameter("sheet_vframes", 4)
+		smat.set_shader_parameter("emissive_mask", civ_f_emi if is_fem else civ_m_emi)
+		smat.set_shader_parameter("normal_map", civ_f_nrm if is_fem else civ_m_nrm)
+		smat.set_shader_parameter("enable_palette_remap", true)
+		smat.set_shader_parameter("jacket_tint", spec[4])
+		smat.set_shader_parameter("pants_tint", spec[5])
+		smat.set_shader_parameter("skin_tint", spec[6])
+		smat.set_shader_parameter("hair_tint", spec[7])
+		c_node.material = smat
+		c_node.position = wp_a.lerp(wp_b, float(i % 4) * 0.25)
+		c_node.set_meta("stratum", 1)
+		add_child(c_node)
+		_actor_prev_pos[c_node.get_instance_id()] = c_node.position
+		_actor_facing_sector[c_node.get_instance_id()] = 0
+		_proc_civilians.append({
+			"node": c_node,
+			"wp_a": wp_a,
+			"wp_b": wp_b,
+			"to_b": (i % 2 == 0),
+			"speed": spd,
+		})
 
 func _process(delta: float) -> void:
 	var needs_redraw := false
@@ -375,6 +652,16 @@ func _process(delta: float) -> void:
 				_update_sprite_facing(op_node, dir)
 			needs_redraw = true
 
+	# Step procedural civilian crowd along sidewalks & crosswalks
+	_step_procedural_civilians(real_dt)
+
+	# Update multi-pose stride/combat rows & depth sorting across all actors
+	_update_actor_animations_and_depth(real_dt)
+
+	# Update proximity building cutaway transparency & occluded X-Ray tracking
+	if _update_building_proximity_cutaway(real_dt):
+		needs_redraw = true
+
 	if _camera != null:
 		var prev_pos := _camera.position
 		var prev_zoom := _camera.zoom.x
@@ -404,21 +691,134 @@ func _process(delta: float) -> void:
 	if needs_redraw:
 		_request_overlay_redraw()
 
+func _step_procedural_civilians(real_dt: float) -> void:
+	for c_entry in _proc_civilians:
+		var c_node: Sprite2D = c_entry["node"]
+		if c_node == null or not c_node.visible:
+			continue
+		var tgt: Vector2 = c_entry["wp_b"] if bool(c_entry["to_b"]) else c_entry["wp_a"]
+		var spd: float = float(c_entry["speed"]) * (1.35 if crowd_surge_active else 1.0)
+		var delta_vec := tgt - c_node.position
+		if delta_vec.length() <= 5.0:
+			c_entry["to_b"] = not bool(c_entry["to_b"])
+		else:
+			var dir := delta_vec.normalized()
+			c_node.position += dir * spd * real_dt
+			_update_sprite_facing(c_node, dir)
+
+func _update_actor_animations_and_depth(real_dt: float) -> void:
+	var all_actors: Array[Sprite2D] = []
+	for op_name in OPERATIVE_NODES:
+		var op := get_node_or_null(op_name) as Sprite2D
+		if op:
+			all_actors.append(op)
+	for n_name in ["CorpSecGuard1", "CorpSecGuard2", "MegacityCivilian1", "MegacityCivilian2"]:
+		var a := get_node_or_null(n_name) as Sprite2D
+		if a:
+			all_actors.append(a)
+	for c_entry in _proc_civilians:
+		var cn: Sprite2D = c_entry["node"]
+		if cn:
+			all_actors.append(cn)
+
+	for actor in all_actors:
+		var iid := actor.get_instance_id()
+		var prev_p: Vector2 = _actor_prev_pos.get(iid, actor.position)
+		var dist := actor.position.distance_to(prev_p)
+		_actor_prev_pos[iid] = actor.position
+
+		var f_timer: float = maxf(0.0, float(_actor_fire_timer.get(iid, 0.0)) - real_dt)
+		_actor_fire_timer[iid] = f_timer
+
+		var dir_sector: int = int(_actor_facing_sector.get(iid, actor.frame_coords.x)) % 8
+		var row: int = 0
+		if f_timer > 0.0:
+			row = 3 # Braced Combat Fire Crouch + Muzzle Flash Star
+		elif dist > 0.12:
+			var phase: float = float(_actor_walk_phase.get(iid, 0.0)) + dist * 0.18
+			_actor_walk_phase[iid] = phase
+			row = STRIDE_ROWS[int(phase) % STRIDE_ROWS.size()]
+		else:
+			_actor_walk_phase[iid] = 0.0
+			row = 0
+
+		if actor.vframes == 4:
+			actor.frame_coords = Vector2i(dir_sector, row)
+
+		var st := int(actor.get_meta("stratum")) if actor.has_meta("stratum") else 1
+		if st == 2:
+			actor.z_index = 1200 + int(actor.position.y)
+		elif st == 0:
+			actor.z_index = -900 + int(actor.position.y)
+		else:
+			actor.z_index = int(actor.position.y)
+
+	# Also depth-sort street vehicles so buildings/agents sort cleanly around them
+	for v_name in ["ExecutiveArmoredLimo", "SyndicateInterceptorCar", "StreetNoodleCart"]:
+		var v := get_node_or_null(v_name) as Node2D
+		if v:
+			v.z_index = int(v.position.y)
+
+func _update_building_proximity_cutaway(real_dt: float) -> bool:
+	var changed := false
+	_occluded_actor_ids.clear()
+	if active_stratum != Stratum.STREET:
+		return false
+
+	var key_actors: Array[Node2D] = []
+	for op_name in OPERATIVE_NODES:
+		var op := get_node_or_null(op_name) as Node2D
+		if op and op.visible and int(op.get_meta("stratum", 1)) == 1:
+			key_actors.append(op)
+	for t_name in ["CorpSecGuard1", "CorpSecGuard2", "MegacityCivilian1", "MegacityCivilian2", "ExecutiveArmoredLimo"]:
+		var tn := get_node_or_null(t_name) as Node2D
+		if tn and tn.visible:
+			key_actors.append(tn)
+
+	for b in _city_buildings:
+		if b == null or not b.visible:
+			continue
+		var bid := b.get_instance_id()
+		var base_y := b.position.y + 42.0
+		var should_cutaway := false
+		for act in key_actors:
+			# Actor is behind the building's front foundation and within its upper-story silhouette
+			if act.position.y < base_y + 18.0 and act.position.y > b.position.y - 115.0:
+				if absf(act.position.x - b.position.x) < 108.0:
+					should_cutaway = true
+					_occluded_actor_ids[act.get_instance_id()] = true
+
+		var target_a := 0.24 if should_cutaway else 1.0
+		var cur_a: float = float(_building_alpha.get(bid, 1.0))
+		var next_a := lerpf(cur_a, target_a, clampf(real_dt * 9.0, 0.0, 1.0))
+		if absf(next_a - cur_a) > 0.005:
+			changed = true
+		_building_alpha[bid] = next_a
+		if b.material is ShaderMaterial:
+			(b.material as ShaderMaterial).set_shader_parameter("building_cutaway_alpha", next_a)
+
+	return changed
+
 func _step_demo_reel(f: int) -> void:
-	# Act I (1..48): Street Deployment & Zaibatsu Convoy Ambush (Camera pans West-South boulevard)
+	# Act I (1..48): Street Deployment, Proximity Building Cutaway & Zaibatsu Convoy Ambush
 	if f == 1:
-		demo_banner_text = "ACT I // STREET DEPLOYMENT & ZAIBATSU LIMO AMBUSH"
+		demo_banner_text = "ACT I // MULTI-POSE STRIDE, BUILDING CUTAWAY & CONVOY AMBUSH"
 		_select_operative(1)
 		active_weapon_index = 0
 		_update_operative_card()
-		move_target_pos = Vector2(516, 430)
+		move_target_pos = Vector2(512, 434)
 		has_move_target = true
-		_cam_target_pos = Vector2(520, 410)
+		_cam_target_pos = Vector2(545, 425)
 		_cam_target_zoom = 1.02
-	elif f > 1 and f < 36:
+	elif f > 1 and f < 46:
 		var limo := get_node_or_null("ExecutiveArmoredLimo") as Sprite2D
 		if limo and not convoy_intercepted:
 			limo.position += Vector2(0.85, 0.42)
+		var null_op := get_node_or_null("OperativeNull3") as Sprite2D
+		if null_op:
+			var nd := Vector2(-0.7, 0.45)
+			null_op.position += nd
+			_update_sprite_facing(null_op, nd)
 	if f == 16:
 		_fire_active_weapon_at(Vector2(490, 470))
 	elif f == 28:
@@ -429,27 +829,32 @@ func _step_demo_reel(f: int) -> void:
 		_fire_active_weapon_at(Vector2(504, 478))
 		_intercept_executive_convoy()
 
-	# Act II (49..96): Persuadertron Neural-Mesh Wave & Crowd Surge (Camera pans East across intersection)
+	# Act II (49..96): Female Operative NULL-3, Persuadertron Neural-Mesh & Infinite Civilian Crowd
 	elif f == 49:
-		demo_banner_text = "ACT II // PERSUADERTRON NEURAL-MESH & CROWD SURGE"
+		demo_banner_text = "ACT II // FEMALE AGENT NULL-3, PERSUADERTRON & CIVILIAN CROWD"
 		_select_operative(2)
-		move_target_pos = Vector2(648, 422)
+		move_target_pos = Vector2(656, 430)
 		has_move_target = true
-		_cam_target_pos = Vector2(710, 405)
+		_cam_target_pos = Vector2(695, 415)
 		_cam_target_zoom = 0.96
 	elif f == 60:
 		_trigger_persuadertron_wave()
 	elif f > 60 and f <= 96:
 		var civ1 := get_node_or_null("MegacityCivilian1") as Sprite2D
+		var civ2 := get_node_or_null("MegacityCivilian2") as Sprite2D
 		var guard1 := get_node_or_null("CorpSecGuard1") as Sprite2D
 		if civ1:
-			var d1 := Vector2(0.9, -0.45)
+			var d1 := Vector2(1.15, -0.55)
 			civ1.position += d1
 			_update_sprite_facing(civ1, d1)
+		if civ2:
+			var d2 := Vector2(-1.05, 0.52)
+			civ2.position += d2
+			_update_sprite_facing(civ2, d2)
 		if guard1:
-			var d2 := Vector2(1.1, -0.3)
-			guard1.position += d2
-			_update_sprite_facing(guard1, d2)
+			var d3 := Vector2(1.2, -0.4)
+			guard1.position += d3
+			_update_sprite_facing(guard1, d3)
 		if f == 78:
 			_trigger_persuadertron_wave()
 
@@ -473,7 +878,7 @@ func _step_demo_reel(f: int) -> void:
 			_fire_active_weapon_at(Vector2(360, 528))
 			_toggle_transformer_sabotage()
 
-	# Act IV (145..192): Spire Skybridge, Adrenaline Overclock 0.25x & Monorail Vault Breach
+	# Act IV (145..192): Female Operative KESTREL-1 on Spire Skybridge, Adrenaline Overclock & Monorail Vault
 	elif f == 145:
 		demo_banner_text = "ACT IV // SPIRE SKYBRIDGE, ADRENALINE OVERCLOCK & MONORAIL VAULT"
 		_select_operative(0)
@@ -496,7 +901,7 @@ func _step_demo_reel(f: int) -> void:
 			_fire_active_weapon_at(Vector2(348, 188))
 			_loot_monorail_wreck()
 
-	# Act V (193..240): Wide Multi-Block Zoom Out + Satellite Rain & Bio-Foundry Tower Collapse
+	# Act V (193..240): Wide Dense City Zoom Out + Satellite Rain & Bio-Foundry Tower Collapse
 	elif f == 193:
 		demo_banner_text = "ACT V // SATELLITE RAIN STRIKE & BIO-FOUNDRY TOWER COLLAPSE"
 		_select_operative(1)
@@ -506,7 +911,7 @@ func _step_demo_reel(f: int) -> void:
 		move_target_pos = Vector2(564, 368)
 		has_move_target = true
 		_cam_target_pos = Vector2(640, 348)
-		_cam_target_zoom = 0.84
+		_cam_target_zoom = 0.82
 	elif f == 202:
 		_fire_active_weapon_at(Vector2(525, 315))
 	elif f == 212:
@@ -533,6 +938,21 @@ func _draw_corner_brackets(c: Node2D, rect: Rect2, col: Color, arm: float = 8.0,
 	c.draw_line(Vector2(x0, y1), Vector2(x0, y1 - arm), col, width)
 	c.draw_line(Vector2(x1, y1), Vector2(x1 - arm, y1), col, width)
 	c.draw_line(Vector2(x1, y1), Vector2(x1, y1 - arm), col, width)
+
+func _draw_xray_cyber_silhouette(c: Node2D, screen_pos: Vector2, z: float, col: Color) -> void:
+	# Tactical X-Ray Cyber-Silhouette drawn when an operative or guard is behind an occluding building
+	var head_c := screen_pos + Vector2(0, -18.0 * z)
+	c.draw_arc(head_c, 6.0 * z, 0.0, TAU, 16, col, 1.6)
+	var torso := PackedVector2Array([
+		screen_pos + Vector2(-9.0 * z, -10.0 * z),
+		screen_pos + Vector2(9.0 * z, -10.0 * z),
+		screen_pos + Vector2(12.0 * z, 18.0 * z),
+		screen_pos + Vector2(-12.0 * z, 18.0 * z),
+		screen_pos + Vector2(-9.0 * z, -10.0 * z),
+	])
+	c.draw_polyline(torso, col, 1.6)
+	c.draw_line(screen_pos + Vector2(-5.0 * z, 18.0 * z), screen_pos + Vector2(-7.0 * z, 32.0 * z), col, 1.6)
+	c.draw_line(screen_pos + Vector2(5.0 * z, 18.0 * z), screen_pos + Vector2(7.0 * z, 32.0 * z), col, 1.6)
 
 func _draw_tactical_overlay() -> void:
 	if _overlay == null:
@@ -570,6 +990,8 @@ func _draw_tactical_overlay() -> void:
 			if g_node != null:
 				var g_sp := _w2s(g_node.position)
 				var g_col := Color(0.25, 0.95, 1.0, 0.9) if crowd_surge_active else Color(1.0, 0.35, 0.32, 0.88)
+				if _occluded_actor_ids.has(g_node.get_instance_id()):
+					_draw_xray_cyber_silhouette(_overlay, g_sp, z, g_col)
 				var g_tag := Rect2(g_sp.x - 36, g_sp.y - 52 * z, 72, 15)
 				_overlay.draw_rect(g_tag, Color(0.03, 0.05, 0.09, 0.86), true)
 				_overlay.draw_rect(g_tag, g_col, false, 1.0)
@@ -600,7 +1022,7 @@ func _draw_tactical_overlay() -> void:
 			var m_txt := "VAULT BREACHED +2500 CR" if monorail_looted else "TARGET // MONORAIL VAULT"
 			_overlay.draw_string(font, Vector2(m_tag.position.x + 6, m_tag.position.y + 13), m_txt, HORIZONTAL_ALIGNMENT_LEFT, 126, 10, m_col)
 
-	# 2. World-Space Squad Operative Callsign Badges & Selection Reticle (active stratum only)
+	# 2. World-Space Squad Operative Callsign Badges, X-Ray Silhouettes & Selection Reticle
 	for i in range(OPERATIVE_NODES.size()):
 		var op := get_node_or_null(OPERATIVE_NODES[i]) as Node2D
 		if op == null or not op.visible:
@@ -611,9 +1033,13 @@ func _draw_tactical_overlay() -> void:
 		if not on_focus and not is_sel:
 			continue
 		var op_sp := _w2s(op.position)
+		var border_col := Color(0.22, 0.96, 1.0, 1.0) if is_sel else Color(0.20, 0.86, 0.58, 1.0)
+
+		if _occluded_actor_ids.has(op.get_instance_id()):
+			_draw_xray_cyber_silhouette(_overlay, op_sp, z, border_col)
 
 		if is_sel:
-			var base := _w2s(op.position + Vector2(0, 36))
+			var base := _w2s(op.position + Vector2(0, 32))
 			var pts := PackedVector2Array([
 				base + Vector2(0, -11 * z),
 				base + Vector2(24 * z, 0),
@@ -622,20 +1048,20 @@ func _draw_tactical_overlay() -> void:
 				base + Vector2(0, -11 * z),
 			])
 			_overlay.draw_polyline(pts, Color(0.22, 0.96, 1.0, 0.95), 2.2)
-			_draw_corner_brackets(_overlay, Rect2(op_sp.x - 24 * z, op_sp.y - 36 * z, 48 * z, 76 * z), Color(0.22, 0.96, 1.0, 0.85), 7.0, 1.6)
+			_draw_corner_brackets(_overlay, Rect2(op_sp.x - 24 * z, op_sp.y - 36 * z, 48 * z, 72 * z), Color(0.22, 0.96, 1.0, 0.85), 7.0, 1.6)
 
 			if has_move_target:
-				var tgt_sp := _w2s(move_target_pos + Vector2(0, 36))
+				var tgt_sp := _w2s(move_target_pos + Vector2(0, 32))
 				_overlay.draw_line(base, tgt_sp, Color(0.22, 0.96, 1.0, 0.55), 1.8)
 				_overlay.draw_circle(tgt_sp, 5.0, Color(0.22, 0.96, 1.0, 0.85))
 
-		var b_rect := Rect2(op_sp.x - 36, op_sp.y - 58 * z, 72, 18)
-		var border_col := Color(0.22, 0.96, 1.0, 1.0) if is_sel else Color(0.20, 0.86, 0.58, 1.0)
+		var b_rect := Rect2(op_sp.x - 40, op_sp.y - 56 * z, 80, 18)
 		_overlay.draw_rect(b_rect, Color(0.03, 0.05, 0.09, 0.90), true)
 		_overlay.draw_rect(b_rect, border_col, false, 1.5 if is_sel else 1.0)
-		_overlay.draw_string(font, Vector2(b_rect.position.x + 5, b_rect.position.y + 11), OPERATIVE_SHORT[i], HORIZONTAL_ALIGNMENT_LEFT, 64, 10, border_col)
-		_overlay.draw_rect(Rect2(b_rect.position.x + 4, b_rect.position.y + 14, 42, 2), Color(0.20, 0.92, 0.55, 1.0), true)
-		_overlay.draw_rect(Rect2(b_rect.position.x + 48, b_rect.position.y + 14, 20, 2), Color(1.0, 0.35, 0.45, 1.0), true)
+		var short_tag: String = _puppet_identities[i]["short_tag"] if i < _puppet_identities.size() else OPERATIVE_SHORT[i]
+		_overlay.draw_string(font, Vector2(b_rect.position.x + 4, b_rect.position.y + 11), short_tag, HORIZONTAL_ALIGNMENT_LEFT, 72, 10, border_col)
+		_overlay.draw_rect(Rect2(b_rect.position.x + 4, b_rect.position.y + 14, 46, 2), Color(0.20, 0.92, 0.55, 1.0), true)
+		_overlay.draw_rect(Rect2(b_rect.position.x + 52, b_rect.position.y + 14, 24, 2), Color(1.0, 0.35, 0.45, 1.0), true)
 
 	# 3. Foreground Combat VFX: Weapon Tracers, Persuadertron Waves, Satellite Rain Beam
 	if tracer_timer > 0.0:
@@ -685,12 +1111,12 @@ func _draw_tactical_overlay() -> void:
 	_draw_sector_minimap(font)
 
 	if demo_reel_active and not demo_banner_text.is_empty():
-		var banner := Rect2(330, 48, 620, 28)
+		var banner := Rect2(310, 48, 660, 28)
 		_overlay.draw_rect(banner, Color(0.03, 0.05, 0.09, 0.92), true)
 		_overlay.draw_rect(banner, Color(0.25, 0.95, 1.0, 0.92), false, 1.6)
-		_overlay.draw_string(font, Vector2(346, 67), demo_banner_text, HORIZONTAL_ALIGNMENT_LEFT, 590, 13, Color(0.98, 0.84, 0.28, 1.0))
+		_overlay.draw_string(font, Vector2(324, 67), demo_banner_text, HORIZONTAL_ALIGNMENT_LEFT, 636, 13, Color(0.98, 0.84, 0.28, 1.0))
 
-	# 6. Bottom-Left Active Operative Detail Card + 4-Operative Squad Mini-Roster
+	# 6. Bottom-Left Active Operative Detail Card + 4-Operative Cortical Meat-Puppet Roster
 	var op_panel := Rect2(10, 548, 720, 162)
 	_overlay.draw_rect(op_panel, Color(0.03, 0.05, 0.09, 0.92), true)
 	_overlay.draw_rect(op_panel, Color(0.20, 0.78, 0.92, 0.85), false, 1.5)
@@ -706,7 +1132,8 @@ func _draw_tactical_overlay() -> void:
 		_overlay.draw_rect(rcard, c_border, false, 1.6 if is_sel else 1.0)
 		if i < _portraits.size() and _portraits[i] != null:
 			_overlay.draw_texture_rect(_portraits[i], Rect2(rx + 4, ry + 18, 44, 44), false)
-		_overlay.draw_string(font, Vector2(rx + 5, ry + 13), OPERATIVE_SHORT[i], HORIZONTAL_ALIGNMENT_LEFT, 112, 10, c_border)
+		var short_tag: String = _puppet_identities[i]["short_tag"] if i < _puppet_identities.size() else OPERATIVE_SHORT[i]
+		_overlay.draw_string(font, Vector2(rx + 5, ry + 13), short_tag, HORIZONTAL_ALIGNMENT_LEFT, 112, 10, c_border)
 		var i_len := 58.0 if overclock_active else 46.0
 		var p_len := 56.0 if overclock_active else 42.0
 		var a_len := 60.0 if overclock_active else 38.0
@@ -743,6 +1170,14 @@ func _draw_sector_minimap(font: Font) -> void:
 	_overlay.draw_line(mc + Vector2(-38, -19), mc + Vector2(38, 19), Color(0.32, 0.52, 0.65, 0.65), 1.0)
 	_overlay.draw_line(mc + Vector2(-38, 19), mc + Vector2(38, -19), Color(0.32, 0.52, 0.65, 0.65), 1.0)
 
+	# City block building blips on radar
+	for b in _city_buildings:
+		if b == null:
+			continue
+		var brel := (b.position - Vector2(640, 388)) * 0.042
+		var bpos := mc + Vector2(clampf(brel.x, -82.0, 82.0), clampf(brel.y, -42.0, 42.0))
+		_overlay.draw_rect(Rect2(bpos.x - 2, bpos.y - 2, 4, 4), Color(0.35, 0.62, 0.78, 0.65), true)
+
 	# Bio-Foundry Core blip at center
 	var bf_c := Color(1.0, 0.38, 0.22, 1.0) if tower_collapsed else Color(0.22, 0.98, 0.62, 1.0)
 	_overlay.draw_rect(Rect2(mc.x - 4, mc.y - 4, 8, 8), bf_c, true)
@@ -778,6 +1213,10 @@ func _unhandled_input(event: InputEvent) -> void:
 				_select_operative((selected_operative + 1) % OPERATIVE_NODES.size())
 			KEY_R:
 				active_weapon_index = (active_weapon_index + 1) % WEAPON_NAMES.size()
+				_update_operative_card()
+			KEY_N:
+				cryo_generation += 1
+				_rebuild_meat_puppet_roster()
 				_update_operative_card()
 			KEY_C:
 				set_tower_collapsed(not tower_collapsed)
@@ -855,7 +1294,11 @@ func _update_sprite_facing(sprite: Sprite2D, dir: Vector2) -> void:
 	if angle < 0.0:
 		angle += TAU
 	var sector := int(round(angle / (PI / 4.0))) % 8
-	sprite.frame = sector
+	_actor_facing_sector[sprite.get_instance_id()] = sector
+	if sprite.vframes == 4:
+		sprite.frame_coords = Vector2i(sector, sprite.frame_coords.y)
+	else:
+		sprite.frame = sector
 
 func _fire_active_weapon_at(target_pos: Vector2) -> void:
 	var op_node := _get_selected_operative_node()
@@ -864,6 +1307,11 @@ func _fire_active_weapon_at(target_pos: Vector2) -> void:
 	var to_target := target_pos - op_node.position
 	if to_target.length_squared() > 1.0:
 		_update_sprite_facing(op_node, to_target.normalized())
+	_actor_fire_timer[op_node.get_instance_id()] = 0.34
+	if op_node.vframes == 4:
+		var sec: int = int(_actor_facing_sector.get(op_node.get_instance_id(), op_node.frame_coords.x)) % 8
+		op_node.frame_coords = Vector2i(sec, 3)
+
 	tracer_start = op_node.position + Vector2(0, -6)
 	tracer_end = target_pos
 	tracer_timer = 0.28
@@ -886,13 +1334,19 @@ func _trigger_persuadertron_wave() -> void:
 	target_pulse_timer = 0.45
 	if not crowd_surge_active:
 		crowd_surge_active = true
-		thrall_count = 4
+		thrall_count = 14
 	for actor_name in ["MegacityCivilian1", "MegacityCivilian2", "CorpSecGuard1", "CorpSecGuard2"]:
 		var actor := get_node_or_null(actor_name) as Sprite2D
 		if actor and actor.material is ShaderMaterial:
 			var smat := actor.material as ShaderMaterial
 			smat.set_shader_parameter("pulse_tint", Vector3(0.2, 0.95, 1.0))
 			smat.set_shader_parameter("pulse_intensity", 0.45)
+	for c_entry in _proc_civilians:
+		var cn: Sprite2D = c_entry["node"]
+		if cn and cn.material is ShaderMaterial:
+			var cmat := cn.material as ShaderMaterial
+			cmat.set_shader_parameter("pulse_tint", Vector3(0.2, 0.95, 1.0))
+			cmat.set_shader_parameter("pulse_intensity", 0.38)
 	_update_operative_card()
 	_refresh_hud()
 	_request_overlay_redraw()
@@ -903,6 +1357,10 @@ func _clear_actor_shader_pulses() -> void:
 		if actor and actor.material is ShaderMaterial:
 			var smat := actor.material as ShaderMaterial
 			smat.set_shader_parameter("pulse_intensity", 0.0)
+	for c_entry in _proc_civilians:
+		var cn: Sprite2D = c_entry["node"]
+		if cn and cn.material is ShaderMaterial:
+			(cn.material as ShaderMaterial).set_shader_parameter("pulse_intensity", 0.0)
 
 func _toggle_transformer_sabotage() -> void:
 	transformer_sabotaged = not transformer_sabotaged
@@ -986,6 +1444,7 @@ func valid_snapshot(data: Variant) -> bool:
 func apply_snapshot(data: Dictionary) -> bool:
 	if not valid_snapshot(data):
 		return false
+	_ensure_m7_initialized()
 	last_digest = String(data["state_digest"])
 	var t_scale := float(data["tactical_time_scale"])
 	overclock_active = t_scale < 0.5
@@ -1066,16 +1525,23 @@ func _update_operative_card() -> void:
 	var op_node := _get_selected_operative_node()
 	var op_stratum := int(op_node.get_meta("stratum")) if (op_node and op_node.has_meta("stratum")) else int(active_stratum)
 	var s_name: String = STRATUM_NAMES.get(op_stratum, "STREET")
-	var ipa_text := "95% / 92% / 98% [SURGE]" if overclock_active else "82% / 78% / 65%"
-	bio_label.text = "OP-%d: %s [%s]\nORGANS: %s\nBIOCHEM I/P/A: %s\nWEAPON: %s\nTHRALLS: %d | SALVAGE: %d" % [
-		selected_operative + 1,
-		OPERATIVE_CALLSIGNS[selected_operative],
+	var ident: Dictionary = _puppet_identities[selected_operative] if selected_operative < _puppet_identities.size() else {
+		"unit_code": "UNIT 01-F // KESTREL",
+		"subj_line": "SUBJ #104 [V. CHEN - WIPED]",
+		"link_str": "99.4%",
+	}
+	var bpm_val: int = 164 if overclock_active else (92 + selected_operative * 6)
+	var ipa_text := "95/92/98% [SURGE]" if overclock_active else "82/78/65%"
+	bio_label.text = "%s [%s]\n%s | LINK: %s | %d BPM\nORGANS: %s\nI/P/A: %s | WPN: %s | THRALLS: %d" % [
+		ident["unit_code"],
 		s_name,
+		ident["subj_line"],
+		ident["link_str"],
+		bpm_val,
 		OPERATIVE_ORGANS[selected_operative],
 		ipa_text,
 		WEAPON_NAMES[active_weapon_index],
 		thrall_count,
-		salvage_units,
 	]
 	_request_overlay_redraw()
 
@@ -1103,7 +1569,7 @@ func _refresh_hud() -> void:
 			+ "[%s] SABOTAGE SUB-GRID TRANSFORMER (T)\n" % ("X" if transformer_sabotaged else " ")
 			+ "[%s] AMBUSH ZAIBATSU LIMO CONVOY (V)\n" % ("X" if convoy_intercepted else " ")
 			+ "[%s] LOOT DERAILED MONORAIL VAULT (M)\n" % ("X" if monorail_looted else " ")
-			+ "[%s] PERSUADERTRON CROWD SURGE (P)\n" % ("X" if crowd_surge_active else " ")
+			+ "[%s] PERSUADERTRON CROWD SURGE (P) | CRYO-CYCLE (N)\n" % ("X" if crowd_surge_active else " ")
 			+ "KBM: LMB/WASD Move | Arrows Pan | Wheel/Z Zoom | RMB Fire | Tab Op | 1-3 Stratum\n"
 			+ "STEAM PAD: L-Stick Move | R-Stick Pan | X Fire | Y Persuade | LB/RB Op | D-Pad"
 		)
