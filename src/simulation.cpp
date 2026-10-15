@@ -758,6 +758,19 @@ bool MegacitySimulation::apply_command(const SimulationCommand& cmd) {
       if (syn.id == fire->attacker_syndicate_id) continue;
       for (auto& op : syn.squad) {
         if (op.alive && op.grid_pos == fire->target_coord) {
+          // Check if a persuaded Escort thrall in this district & stratum
+          // intercepts the incoming ballistic fire as a human shield
+          auto shield_it =
+              std::ranges::find_if(syn.thralls, [&](const PersuadedThrall& t) {
+                return t.directive == ThrallDirective::Escort &&
+                       t.district_id == fire->district_id &&
+                       t.stratum == fire->target_coord.stratum;
+              });
+          if (shield_it != syn.thralls.end()) {
+            syn.thralls.erase(shield_it);
+            continue;
+          }
+
           const int chest_armor =
               static_cast<int>(op.organ_tier(OrganSlot::Chest)) * 10;
           op.health =
@@ -919,6 +932,33 @@ bool MegacitySimulation::apply_command(const SimulationCommand& cmd) {
     return true;
   }
 
+  if (const auto* thaw = std::get_if<CommandThawCryoReplacement>(&cmd)) {
+    auto* syn = find_syndicate_mut(thaw->syndicate_id);
+    if (syn == nullptr || thaw->operative_index >= syn->squad.size() ||
+        syn->treasury < 500) {
+      return false;
+    }
+    auto& op = syn->squad.at(thaw->operative_index);
+    if (op.alive) return false;
+
+    syn->treasury -= 500;
+    if (!thaw->new_callsign.empty()) {
+      op.callsign = thaw->new_callsign;
+    }
+    op.health = 100;
+    op.alive = true;
+    op.organs = {
+        CyberTier::V1, CyberTier::V1, CyberTier::V1,
+        CyberTier::V1, CyberTier::V1, CyberTier::V1,
+    };
+    op.sliders = BiochemSliders{};
+    op.neural_toxicity = 0.0;
+    op.cardiac_strain = 0.0;
+    op.overclock = OverclockState::Inactive;
+    op.medical_status = MedicalStatus::Nominal;
+    return true;
+  }
+
   return false;
 }
 
@@ -955,6 +995,33 @@ void MegacitySimulation::step_syndicate_biochem(SyndicateLedger& syndicate) {
       op.medical_status = MedicalStatus::CardiacFlatline;
       op.alive = false;
       op.overclock = OverclockState::Inactive;
+
+      // Spawn harvestable cyber-organ drop at flatlined operative's position
+      DistrictId drop_dist_id = 1;
+      if (const auto* bld = find_building(op.occupied_building);
+          bld != nullptr) {
+        drop_dist_id = bld->district_id;
+      }
+      if (auto* dist = find_district_mut(drop_dist_id); dist != nullptr) {
+        std::vector<BlueprintId> drops;
+        for (const auto& bp : blueprints_) {
+          if (bp.category == BlueprintCategory::CyberneticOrgan &&
+              static_cast<int>(op.organ_tier(bp.organ_slot)) >=
+                  static_cast<int>(bp.cyber_tier)) {
+            drops.push_back(bp.id);
+          }
+        }
+        if (drops.empty() && !blueprints_.empty()) {
+          drops.push_back(blueprints_.front().id);
+        }
+        dist->corpse_drops.push_back(CorpseHardwareDrop{
+            .fallen_operative_id = op.id,
+            .original_syndicate_id = syndicate.id,
+            .coord = op.grid_pos,
+            .blueprint_ids = std::move(drops),
+            .extracted = false,
+        });
+      }
     } else if (op.neural_toxicity >= 1.0) {
       op.medical_status = MedicalStatus::CyberPsychosis;
     } else {
@@ -1144,6 +1211,17 @@ bool MegacitySimulation::attempt_persuade(
   const double bw = persuadertron_bandwidth(syndicate_id, operative_index);
   if (bw < persuade_threshold(target_class)) {
     return false;
+  }
+
+  if (target_class == PersuadeTargetClass::RivalOperative) {
+    for (auto& rival_syn : syndicates_) {
+      if (rival_syn.id == syndicate_id) continue;
+      for (auto& rop : rival_syn.squad) {
+        if (rop.id == actor_id && rop.alive) {
+          rop.alive = false;
+        }
+      }
+    }
   }
 
   syn->thralls.push_back(PersuadedThrall{
@@ -1480,8 +1558,74 @@ MegacitySimulation create_default_vertical_slice(SessionMode mode) {
       .thralls = {},
   };
 
+  SyndicateLedger triad{
+      .id = 3,
+      .name = "CHIBA TRIAD",
+      .treasury = 5800,
+      .research = {},
+      .cryo_vault_salvage = {},
+      .squad =
+          {
+              OperativeState{.id = 301,
+                             .callsign = "VIPER-1",
+                             .current_stratum = Stratum::Spire,
+                             .grid_pos = {11, 4, Stratum::Spire},
+                             .occupied_building = 50},
+              OperativeState{.id = 302,
+                             .callsign = "VIPER-2",
+                             .current_stratum = Stratum::Street,
+                             .grid_pos = {11, 5, Stratum::Street},
+                             .occupied_building = 50},
+              OperativeState{.id = 303,
+                             .callsign = "VIPER-3",
+                             .current_stratum = Stratum::Street,
+                             .grid_pos = {12, 5, Stratum::Street},
+                             .occupied_building = 50},
+              OperativeState{.id = 304,
+                             .callsign = "VIPER-4",
+                             .current_stratum = Stratum::UnderGrid,
+                             .grid_pos = {11, 4, Stratum::UnderGrid},
+                             .occupied_building = 50},
+          },
+      .thralls = {},
+  };
+
+  SyndicateLedger omni{
+      .id = 4,
+      .name = "OMNI-DIRECTIVE",
+      .treasury = 6400,
+      .research = {},
+      .cryo_vault_salvage = {},
+      .squad =
+          {
+              OperativeState{.id = 401,
+                             .callsign = "AEGIS-1",
+                             .current_stratum = Stratum::Spire,
+                             .grid_pos = {4, 11, Stratum::Spire},
+                             .occupied_building = 60},
+              OperativeState{.id = 402,
+                             .callsign = "AEGIS-2",
+                             .current_stratum = Stratum::Street,
+                             .grid_pos = {5, 11, Stratum::Street},
+                             .occupied_building = 60},
+              OperativeState{.id = 403,
+                             .callsign = "AEGIS-3",
+                             .current_stratum = Stratum::Street,
+                             .grid_pos = {5, 12, Stratum::Street},
+                             .occupied_building = 60},
+              OperativeState{.id = 404,
+                             .callsign = "AEGIS-4",
+                             .current_stratum = Stratum::UnderGrid,
+                             .grid_pos = {4, 11, Stratum::UnderGrid},
+                             .occupied_building = 60},
+          },
+      .thralls = {},
+  };
+
   sim.add_syndicate(std::move(player));
   sim.add_syndicate(std::move(rival));
+  sim.add_syndicate(std::move(triad));
+  sim.add_syndicate(std::move(omni));
 
   DistrictState kowloon{
       .id = 1,
@@ -1496,7 +1640,7 @@ MegacitySimulation create_default_vertical_slice(SessionMode mode) {
       .sleeper_vision_syndicate = 0,
       .monorail_vault_loot = 0,
       .security_budget = 120,
-      .adjacent_districts = {2, 3},
+      .adjacent_districts = {2, 3, 5},
       .buildings = {},
       .tactical_grid = SectorGrid(16, 16),
       .corpse_drops = {},
@@ -1532,7 +1676,7 @@ MegacitySimulation create_default_vertical_slice(SessionMode mode) {
       .sleeper_vision_syndicate = 0,
       .monorail_vault_loot = 0,
       .security_budget = 100,
-      .adjacent_districts = {1, 3},
+      .adjacent_districts = {1, 3, 4},
       .buildings = {},
       .tactical_grid = SectorGrid(16, 16),
       .corpse_drops = {},
@@ -1551,7 +1695,64 @@ MegacitySimulation create_default_vertical_slice(SessionMode mode) {
       .sleeper_vision_syndicate = 0,
       .monorail_vault_loot = 0,
       .security_budget = 90,
-      .adjacent_districts = {1, 2},
+      .adjacent_districts = {1, 2, 5, 6},
+      .buildings = {},
+      .tactical_grid = SectorGrid(16, 16),
+      .corpse_drops = {},
+  });
+
+  sim.add_district(DistrictState{
+      .id = 4,
+      .name = "NEO-RUHR ORDINANCE FOUNDRY",
+      .owner_syndicate = 2,
+      .organ = CityOrgan::OrdinanceFoundry,
+      .power_blackout = false,
+      .monorail_wreck_lootable = false,
+      .crowd_surge_active = false,
+      .transformer_intact = true,
+      .executive_convoy_active = true,
+      .sleeper_vision_syndicate = 0,
+      .monorail_vault_loot = 0,
+      .security_budget = 130,
+      .adjacent_districts = {2, 6},
+      .buildings = {},
+      .tactical_grid = SectorGrid(16, 16),
+      .corpse_drops = {},
+  });
+
+  sim.add_district(DistrictState{
+      .id = 5,
+      .name = "MID-LEVELS POWER SUB-GRID",
+      .owner_syndicate = 3,
+      .organ = CityOrgan::PowerSubGrid,
+      .power_blackout = false,
+      .monorail_wreck_lootable = false,
+      .crowd_surge_active = false,
+      .transformer_intact = true,
+      .executive_convoy_active = true,
+      .sleeper_vision_syndicate = 0,
+      .monorail_vault_loot = 0,
+      .security_budget = 135,
+      .adjacent_districts = {1, 3, 6},
+      .buildings = {},
+      .tactical_grid = SectorGrid(16, 16),
+      .corpse_drops = {},
+  });
+
+  sim.add_district(DistrictState{
+      .id = 6,
+      .name = "ZAIBATSU CLEARINGHOUSE ARCOLOGY",
+      .owner_syndicate = 4,
+      .organ = CityOrgan::Clearinghouse,
+      .power_blackout = false,
+      .monorail_wreck_lootable = false,
+      .crowd_surge_active = false,
+      .transformer_intact = true,
+      .executive_convoy_active = true,
+      .sleeper_vision_syndicate = 0,
+      .monorail_vault_loot = 0,
+      .security_budget = 140,
+      .adjacent_districts = {3, 4, 5},
       .buildings = {},
       .tactical_grid = SectorGrid(16, 16),
       .corpse_drops = {},
@@ -1655,6 +1856,94 @@ MegacitySimulation create_default_vertical_slice(SessionMode mode) {
                            .collapsed = false},
               StorySegment{.stratum = Stratum::Spire,
                            .story_index = 1,
+                           .intact_columns = 4,
+                           .total_columns = 4,
+                           .collapsed = false},
+          },
+  });
+
+  sim.add_building(BuildingStructure{
+      .id = 40,
+      .name = "Neo-Ruhr Plasma Ordinance Smelter",
+      .district_id = 4,
+      .houses_city_organ = true,
+      .is_skybridge_hub = true,
+      .base_daily_revenue = 1050,
+      .rebuild_total_cost = 2100,
+      .rebuild_total_ticks = 5,
+      .rebuild_ticks_remaining = 0,
+      .state = BuildingState::Intact,
+      .stories =
+          {
+              StorySegment{.stratum = Stratum::UnderGrid,
+                           .story_index = 0,
+                           .intact_columns = 4,
+                           .total_columns = 4,
+                           .collapsed = false},
+              StorySegment{.stratum = Stratum::Street,
+                           .story_index = 1,
+                           .intact_columns = 4,
+                           .total_columns = 4,
+                           .collapsed = false},
+              StorySegment{.stratum = Stratum::Spire,
+                           .story_index = 2,
+                           .intact_columns = 4,
+                           .total_columns = 4,
+                           .collapsed = false},
+          },
+  });
+
+  sim.add_building(BuildingStructure{
+      .id = 50,
+      .name = "Mid-Levels Geodesic Fusion Sub-Grid",
+      .district_id = 5,
+      .houses_city_organ = true,
+      .is_skybridge_hub = false,
+      .base_daily_revenue = 850,
+      .rebuild_total_cost = 1700,
+      .rebuild_total_ticks = 4,
+      .rebuild_ticks_remaining = 0,
+      .state = BuildingState::Intact,
+      .stories =
+          {
+              StorySegment{.stratum = Stratum::UnderGrid,
+                           .story_index = 0,
+                           .intact_columns = 4,
+                           .total_columns = 4,
+                           .collapsed = false},
+              StorySegment{.stratum = Stratum::Street,
+                           .story_index = 1,
+                           .intact_columns = 4,
+                           .total_columns = 4,
+                           .collapsed = false},
+          },
+  });
+
+  sim.add_building(BuildingStructure{
+      .id = 60,
+      .name = "Zaibatsu Central Clearinghouse Tower",
+      .district_id = 6,
+      .houses_city_organ = true,
+      .is_skybridge_hub = true,
+      .base_daily_revenue = 1400,
+      .rebuild_total_cost = 2800,
+      .rebuild_total_ticks = 7,
+      .rebuild_ticks_remaining = 0,
+      .state = BuildingState::Intact,
+      .stories =
+          {
+              StorySegment{.stratum = Stratum::UnderGrid,
+                           .story_index = 0,
+                           .intact_columns = 4,
+                           .total_columns = 4,
+                           .collapsed = false},
+              StorySegment{.stratum = Stratum::Street,
+                           .story_index = 1,
+                           .intact_columns = 4,
+                           .total_columns = 4,
+                           .collapsed = false},
+              StorySegment{.stratum = Stratum::Spire,
+                           .story_index = 2,
                            .intact_columns = 4,
                            .total_columns = 4,
                            .collapsed = false},

@@ -145,6 +145,18 @@ var _occluded_actor_ids: Dictionary = {}
 var _proc_civilians: Array[Dictionary] = []
 var _m7_initialized: bool = false
 
+# M8 3-Strategy Doctrine & 3-Syndicate 12-Operative Multi-Stratum Convergence State
+var _rival_operatives: Array[Dictionary] = []
+var shepherd_shield_active: bool = false
+var enemy_tracer_start: Vector2 = Vector2.ZERO
+var enemy_tracer_end: Vector2 = Vector2.ZERO
+var enemy_tracer_timer: float = 0.0
+var skybridge_breached: bool = false
+var vex_flatlined: bool = false
+var has_corpse_salvage: bool = false
+var corpse_salvage_pos: Vector2 = Vector2(548, 434)
+var stress_test_mode: String = ""
+
 func _load_tex(res_path: String) -> Texture2D:
 	var abs_path := ProjectSettings.globalize_path(res_path)
 	if FileAccess.file_exists(abs_path):
@@ -162,6 +174,7 @@ func _ensure_m7_initialized() -> void:
 	_rebuild_meat_puppet_roster()
 	_configure_multi_pose_actors()
 	_populate_sector_grid()
+	_spawn_rival_syndicate_squads()
 
 func _ready() -> void:
 	_ensure_m7_initialized()
@@ -172,7 +185,11 @@ func _ready() -> void:
 	_update_building_proximity_cutaway(1.0)
 	_update_operative_card()
 	_refresh_hud()
-	if "--demo-reel" in OS.get_cmdline_user_args():
+	var uargs := OS.get_cmdline_user_args()
+	for idx in range(uargs.size()):
+		if uargs[idx] == "--stress-test" and idx + 1 < uargs.size():
+			_activate_stress_test(uargs[idx + 1])
+	if "--demo-reel" in uargs:
 		demo_reel_active = true
 		_select_operative(1)
 	if DisplayServer.get_name() == "headless":
@@ -586,11 +603,160 @@ func _spawn_procedural_civilian_crowd() -> void:
 			"speed": spd,
 		})
 
+func _spawn_rival_syndicate_squads() -> void:
+	if not _rival_operatives.is_empty():
+		return
+	var op_tpl := get_node_or_null("OperativeVex2") as Sprite2D
+	if op_tpl == null or not (op_tpl.material is ShaderMaterial):
+		return
+	var fem_op_alb := _load_tex("res://assets/sprites/operative_female_albedo.png")
+	var fem_op_emi := _load_tex("res://assets/sprites/operative_female_emissive.png")
+	var fem_op_nrm := _load_tex("res://assets/normals/operative_female_normal.png")
+	var male_op_alb := _load_tex("res://assets/sprites/operative_trenchcoat_albedo.png")
+	var male_op_emi := _load_tex("res://assets/sprites/operative_trenchcoat_emissive.png")
+	var male_op_nrm := _load_tex("res://assets/normals/operative_trenchcoat_normal.png")
+
+	# 8 Rival Operatives across Zaibatsu Kao (Syndicate 2, Crimson) & Chiba Triad (Syndicate 3, Amber-Emerald)
+	var rival_specs := [
+		["RivalZaibatsuOni1", "ZAIBATSU // ONI-1", 2, false, Vector2(736, 442), 1, 5, Color(1.0, 0.28, 0.35, 1.0), Vector3(1.0, 0.22, 0.28)],
+		["RivalZaibatsuOni2", "ZAIBATSU // ONI-2", 2, true, Vector2(782, 412), 1, 6, Color(1.0, 0.28, 0.35, 1.0), Vector3(1.0, 0.22, 0.28)],
+		["RivalZaibatsuOni3", "ZAIBATSU // ONI-3", 2, false, Vector2(560, 214), 2, 4, Color(1.0, 0.28, 0.35, 1.0), Vector3(1.0, 0.22, 0.28)],
+		["RivalZaibatsuOni4", "ZAIBATSU // ONI-4", 2, true, Vector2(492, 514), 0, 2, Color(1.0, 0.28, 0.35, 1.0), Vector3(1.0, 0.22, 0.28)],
+		["RivalTriadViper1", "TRIAD // VIPER-1", 3, true, Vector2(598, 224), 2, 6, Color(0.28, 0.98, 0.52, 1.0), Vector3(0.25, 0.96, 0.45)],
+		["RivalTriadViper2", "TRIAD // VIPER-2", 3, false, Vector2(458, 396), 1, 1, Color(0.28, 0.98, 0.52, 1.0), Vector3(0.25, 0.96, 0.45)],
+		["RivalTriadViper3", "TRIAD // VIPER-3", 3, true, Vector2(424, 428), 1, 2, Color(0.28, 0.98, 0.52, 1.0), Vector3(0.25, 0.96, 0.45)],
+		["RivalTriadViper4", "TRIAD // VIPER-4", 3, false, Vector2(544, 536), 0, 7, Color(0.28, 0.98, 0.52, 1.0), Vector3(0.25, 0.96, 0.45)],
+	]
+
+	for r_spec in rival_specs:
+		var r_node := Sprite2D.new()
+		r_node.name = r_spec[0]
+		var is_fem: bool = r_spec[3]
+		r_node.hframes = 8
+		r_node.vframes = 4
+		r_node.texture = fem_op_alb if is_fem else male_op_alb
+		var smat := (op_tpl.material as ShaderMaterial).duplicate() as ShaderMaterial
+		smat.set_shader_parameter("sheet_vframes", 4)
+		smat.set_shader_parameter("emissive_mask", fem_op_emi if is_fem else male_op_emi)
+		smat.set_shader_parameter("normal_map", fem_op_nrm if is_fem else male_op_nrm)
+		smat.set_shader_parameter("pulse_tint", r_spec[8])
+		smat.set_shader_parameter("pulse_intensity", 0.30)
+		r_node.material = smat
+		r_node.position = r_spec[4]
+		r_node.set_meta("stratum", int(r_spec[5]))
+		add_child(r_node)
+		_actor_prev_pos[r_node.get_instance_id()] = r_node.position
+		_actor_facing_sector[r_node.get_instance_id()] = int(r_spec[6])
+		r_node.frame_coords = Vector2i(int(r_spec[6]), 0)
+		_rival_operatives.append({
+			"node": r_node,
+			"tag": r_spec[1],
+			"syndicate": int(r_spec[2]),
+			"color": r_spec[7],
+			"hp_ratio": 1.0,
+			"hijacked": false,
+		})
+
+func _activate_stress_test(mode_name: String) -> void:
+	stress_test_mode = mode_name
+	demo_reel_active = true
+	if mode_name == "shepherd":
+		demo_banner_text = "STRATEGY TEST A // PERSUADERTRON HUMAN-SHIELD PHALANX & INTACT CAPTURE"
+		_select_operative(2) # NULL-3 (V4 Brain)
+		var null_op := get_node_or_null("OperativeNull3") as Sprite2D
+		if null_op:
+			null_op.position = Vector2(632, 424)
+		_trigger_persuadertron_wave()
+		shepherd_shield_active = true
+		thrall_count = 16
+		# Hijack Zaibatsu ONI-1 into EuroCorp Thrall Mesh
+		if not _rival_operatives.is_empty():
+			_rival_operatives[0]["hijacked"] = true
+			_rival_operatives[0]["tag"] = "THRALL // ONI-1 [HIJACKED]"
+			_rival_operatives[0]["color"] = Color(0.22, 0.96, 1.0, 1.0)
+			var oni1_node: Sprite2D = _rival_operatives[0]["node"]
+			oni1_node.position = Vector2(704, 434)
+			var oni2_node: Sprite2D = _rival_operatives[1]["node"]
+			oni2_node.position = Vector2(768, 418)
+			_actor_fire_timer[oni2_node.get_instance_id()] = 9.0
+			# Position 6 Escort Civilian Thralls in a tight human-shield arc screening NULL-3
+			var shield_offsets := [
+				Vector2(44, -14),
+				Vector2(48, 8),
+				Vector2(36, 26),
+				Vector2(14, -26),
+				Vector2(-24, -18),
+				Vector2(-28, 16),
+			]
+			for s_i in range(min(shield_offsets.size(), _proc_civilians.size())):
+				var cn: Sprite2D = _proc_civilians[s_i]["node"]
+				cn.position = Vector2(632, 424) + shield_offsets[s_i]
+			enemy_tracer_start = oni2_node.position + Vector2(0, -8)
+			enemy_tracer_end = Vector2(632, 424) + shield_offsets[0]
+			enemy_tracer_timer = 9.0
+		_cam_target_pos = Vector2(656, 412)
+		_cam_target_zoom = 1.04
+	elif mode_name == "scorched_earth":
+		demo_banner_text = "STRATEGY TEST B // SCORCHED-EARTH HEAVY ORDINANCE & RUBBLE FALLOUT"
+		_select_operative(1) # VEX-2
+		active_weapon_index = 3 # SATELLITE RAIN
+		set_tower_collapsed(true)
+		satellite_strike_timer = 0.42
+		_fire_active_weapon_at(Vector2(640, 292))
+		_cam_target_pos = Vector2(640, 345)
+		_cam_target_zoom = 0.88
+	elif mode_name == "three_way_clash":
+		demo_banner_text = "STRESS TEST C // 3-SYNDICATE 12-AGENT CONVERGENCE, BREACH & SALVAGE"
+		_select_operative(2) # NULL-3 with V3 Heart harvesting flatlined VEX-2
+		overclock_active = true
+		skybridge_breached = true
+		vex_flatlined = true
+		has_corpse_salvage = true
+		var vex_node := get_node_or_null("OperativeVex2") as Sprite2D
+		var null_node := get_node_or_null("OperativeNull3") as Sprite2D
+		if vex_node and null_node:
+			corpse_salvage_pos = Vector2(556, 434)
+			vex_node.position = corpse_salvage_pos
+			vex_node.visible = false
+			null_node.position = Vector2(582, 442)
+			_actor_fire_timer[null_node.get_instance_id()] = 9.0
+		# Drop Zaibatsu ONI-3 and Chiba Triad VIPER-1 from breached Spire skybridge to Street with fall damage
+		if _rival_operatives.size() >= 6:
+			var oni3: Dictionary = _rival_operatives[2]
+			var vip1: Dictionary = _rival_operatives[4]
+			(oni3["node"] as Sprite2D).set_meta("stratum", 1)
+			(oni3["node"] as Sprite2D).position = Vector2(616, 354)
+			oni3["hp_ratio"] = 0.75
+			_actor_fire_timer[(oni3["node"] as Sprite2D).get_instance_id()] = 9.0
+			(vip1["node"] as Sprite2D).set_meta("stratum", 1)
+			(vip1["node"] as Sprite2D).position = Vector2(668, 362)
+			vip1["hp_ratio"] = 0.75
+			_actor_fire_timer[(vip1["node"] as Sprite2D).get_instance_id()] = 9.0
+			var vip2_node: Sprite2D = _rival_operatives[5]["node"]
+			vip2_node.position = Vector2(492, 412)
+			_actor_fire_timer[vip2_node.get_instance_id()] = 9.0
+			enemy_tracer_start = vip2_node.position + Vector2(0, -8)
+			enemy_tracer_end = (oni3["node"] as Sprite2D).position + Vector2(0, -6)
+			enemy_tracer_timer = 9.0
+		tracer_start = Vector2(582, 436)
+		tracer_end = Vector2(668, 358)
+		tracer_color = Color(0.25, 0.95, 1.0, 1.0)
+		tracer_timer = 9.0
+		_apply_stratum_cutaway(Stratum.STREET)
+		_cam_target_pos = Vector2(610, 396)
+		_cam_target_zoom = 0.96
+	if _camera != null:
+		_camera.position = _cam_target_pos
+		_camera.zoom = Vector2(_cam_target_zoom, _cam_target_zoom)
+	_update_actor_animations_and_depth(0.016)
+	_update_building_proximity_cutaway(1.0)
+	_refresh_hud()
+
 func _process(delta: float) -> void:
 	var needs_redraw := false
 	var real_dt: float = delta / maxf(Engine.time_scale, 0.05)
 
-	if demo_reel_active:
+	if demo_reel_active and stress_test_mode.is_empty():
 		demo_frame += 1
 		_step_demo_reel(demo_frame)
 		needs_redraw = true
@@ -652,8 +818,9 @@ func _process(delta: float) -> void:
 				_update_sprite_facing(op_node, dir)
 			needs_redraw = true
 
-	# Step procedural civilian crowd along sidewalks & crosswalks
-	_step_procedural_civilians(real_dt)
+	# Step procedural civilian crowd along sidewalks & crosswalks (or Escort ring)
+	if stress_test_mode.is_empty():
+		_step_procedural_civilians(real_dt)
 
 	# Update multi-pose stride/combat rows & depth sorting across all actors
 	_update_actor_animations_and_depth(real_dt)
@@ -675,6 +842,10 @@ func _process(delta: float) -> void:
 		tracer_timer = maxf(0.0, tracer_timer - real_dt)
 		needs_redraw = true
 
+	if enemy_tracer_timer > 0.0:
+		enemy_tracer_timer = maxf(0.0, enemy_tracer_timer - real_dt)
+		needs_redraw = true
+
 	if persuade_timer > 0.0:
 		persuade_timer = maxf(0.0, persuade_timer - real_dt)
 		needs_redraw = true
@@ -692,9 +863,20 @@ func _process(delta: float) -> void:
 		_request_overlay_redraw()
 
 func _step_procedural_civilians(real_dt: float) -> void:
-	for c_entry in _proc_civilians:
+	var sel_op := _get_selected_operative_node()
+	for idx in range(_proc_civilians.size()):
+		var c_entry: Dictionary = _proc_civilians[idx]
 		var c_node: Sprite2D = c_entry["node"]
 		if c_node == null or not c_node.visible:
+			continue
+		if shepherd_shield_active and sel_op != null and idx < 6:
+			var ang := float(idx) * (TAU / 6.0) + float(Time.get_ticks_msec()) * 0.0012
+			var orbit_tgt := sel_op.position + Vector2(cos(ang) * 44.0, sin(ang) * 24.0)
+			var to_orb := orbit_tgt - c_node.position
+			if to_orb.length() > 2.0:
+				var d := to_orb.normalized()
+				c_node.position += d * minf(to_orb.length(), 95.0 * real_dt)
+				_update_sprite_facing(c_node, d)
 			continue
 		var tgt: Vector2 = c_entry["wp_b"] if bool(c_entry["to_b"]) else c_entry["wp_a"]
 		var spd: float = float(c_entry["speed"]) * (1.35 if crowd_surge_active else 1.0)
@@ -720,6 +902,10 @@ func _update_actor_animations_and_depth(real_dt: float) -> void:
 		var cn: Sprite2D = c_entry["node"]
 		if cn:
 			all_actors.append(cn)
+	for r_entry in _rival_operatives:
+		var rn: Sprite2D = r_entry["node"]
+		if rn:
+			all_actors.append(rn)
 
 	for actor in all_actors:
 		var iid := actor.get_instance_id()
@@ -774,6 +960,10 @@ func _update_building_proximity_cutaway(real_dt: float) -> bool:
 		var tn := get_node_or_null(t_name) as Node2D
 		if tn and tn.visible:
 			key_actors.append(tn)
+	for r_entry in _rival_operatives:
+		var rn: Node2D = r_entry["node"]
+		if rn and rn.visible and int(rn.get_meta("stratum", 1)) == 1:
+			key_actors.append(rn)
 
 	for b in _city_buildings:
 		if b == null or not b.visible:
@@ -1063,7 +1253,71 @@ func _draw_tactical_overlay() -> void:
 		_overlay.draw_rect(Rect2(b_rect.position.x + 4, b_rect.position.y + 14, 46, 2), Color(0.20, 0.92, 0.55, 1.0), true)
 		_overlay.draw_rect(Rect2(b_rect.position.x + 52, b_rect.position.y + 14, 24, 2), Color(1.0, 0.35, 0.45, 1.0), true)
 
-	# 3. Foreground Combat VFX: Weapon Tracers, Persuadertron Waves, Satellite Rain Beam
+	# 2b. Rival Syndicate Operatives (Zaibatsu Crimson & Chiba Triad Emerald) + Hijacked Thralls
+	for r_entry in _rival_operatives:
+		var rn: Node2D = r_entry["node"]
+		if rn == null or not rn.visible:
+			continue
+		var r_s := int(rn.get_meta("stratum", 1))
+		if r_s != int(active_stratum):
+			continue
+		var r_sp := _w2s(rn.position)
+		var r_col: Color = r_entry["color"]
+		if _occluded_actor_ids.has(rn.get_instance_id()):
+			_draw_xray_cyber_silhouette(_overlay, r_sp, z, r_col)
+		var r_tag_str: String = r_entry["tag"]
+		var r_w := 142.0 if bool(r_entry["hijacked"]) else 108.0
+		var r_rect := Rect2(r_sp.x - r_w * 0.5, r_sp.y - 56 * z, r_w, 18)
+		_overlay.draw_rect(r_rect, Color(0.03, 0.05, 0.09, 0.92), true)
+		_overlay.draw_rect(r_rect, r_col, false, 1.4)
+		_overlay.draw_string(font, Vector2(r_rect.position.x + 5, r_rect.position.y + 11), r_tag_str, HORIZONTAL_ALIGNMENT_LEFT, r_w - 8, 9, r_col)
+		var hp_w := (r_w - 10.0) * float(r_entry["hp_ratio"])
+		_overlay.draw_rect(Rect2(r_rect.position.x + 5, r_rect.position.y + 14, hp_w, 2), r_col, true)
+
+	# 2c. Persuadertron Human-Shield Phalanx Tethers & Ballistic Intercept Callout
+	if shepherd_shield_active:
+		var sel_op := _get_selected_operative_node()
+		if sel_op != null:
+			var op_sp := _w2s(sel_op.position)
+			_overlay.draw_arc(op_sp + Vector2(0, 12 * z), 52.0 * z, 0.0, TAU, 48, Color(0.22, 0.96, 1.0, 0.65), 2.0)
+			for s_i in range(min(6, _proc_civilians.size())):
+				var cn: Node2D = _proc_civilians[s_i]["node"]
+				var c_sp := _w2s(cn.position)
+				_overlay.draw_line(op_sp, c_sp, Color(0.22, 0.96, 1.0, 0.72), 1.6)
+				_overlay.draw_circle(c_sp, 4.0, Color(0.22, 0.96, 1.0, 0.92))
+			var sh_tag := Rect2(op_sp.x - 106, op_sp.y + 38 * z, 212, 18)
+			_overlay.draw_rect(sh_tag, Color(0.03, 0.05, 0.09, 0.92), true)
+			_overlay.draw_rect(sh_tag, Color(0.22, 0.96, 1.0, 0.95), false, 1.4)
+			_overlay.draw_string(font, Vector2(sh_tag.position.x + 6, sh_tag.position.y + 13), "ESCORT SHIELD // 0 OP DMG TAKEN", HORIZONTAL_ALIGNMENT_LEFT, 200, 10, Color(0.22, 0.96, 1.0, 1.0))
+
+	# 2d. Breached Skybridge Drop-Through & Friendly Flatline Cyber-Organ Salvage Crate
+	if skybridge_breached and active_stratum == Stratum.STREET:
+		var br_sp := _w2s(Vector2(642, 348))
+		_overlay.draw_arc(br_sp, 44.0 * z, 0.0, TAU, 36, Color(1.0, 0.62, 0.18, 0.88), 2.4)
+		var br_tag := Rect2(br_sp.x - 108, br_sp.y - 38 * z, 216, 18)
+		_overlay.draw_rect(br_tag, Color(0.03, 0.05, 0.09, 0.92), true)
+		_overlay.draw_rect(br_tag, Color(1.0, 0.62, 0.18, 0.95), false, 1.4)
+		_overlay.draw_string(font, Vector2(br_tag.position.x + 6, br_tag.position.y + 13), "SKYBRIDGE BREACH // -25 HP FALL", HORIZONTAL_ALIGNMENT_LEFT, 204, 10, Color(1.0, 0.76, 0.25, 1.0))
+
+	if has_corpse_salvage and active_stratum == Stratum.STREET:
+		var cs_sp := _w2s(corpse_salvage_pos)
+		var cs_rect := Rect2(cs_sp.x - 12 * z, cs_sp.y - 10 * z, 24 * z, 20 * z)
+		_overlay.draw_rect(cs_rect, Color(0.08, 0.28, 0.34, 0.95), true)
+		_overlay.draw_rect(cs_rect, Color(0.25, 0.98, 0.72, 1.0), false, 2.0)
+		var cs_tag := Rect2(cs_sp.x - 114, cs_sp.y + 16 * z, 228, 18)
+		_overlay.draw_rect(cs_tag, Color(0.03, 0.05, 0.09, 0.92), true)
+		_overlay.draw_rect(cs_tag, Color(0.25, 0.98, 0.72, 0.95), false, 1.4)
+		_overlay.draw_string(font, Vector2(cs_tag.position.x + 6, cs_tag.position.y + 13), "VEX-2 FLATLINE // HARVEST V3 LEGS", HORIZONTAL_ALIGNMENT_LEFT, 218, 10, Color(0.25, 0.98, 0.72, 1.0))
+
+	# 3. Foreground Combat VFX: Weapon Tracers, Enemy Tracers, Persuadertron Waves, Satellite Rain Beam
+	if enemy_tracer_timer > 0.0:
+		var ets := _w2s(enemy_tracer_start)
+		var ete := _w2s(enemy_tracer_end)
+		_overlay.draw_line(ets, ete, Color(1.0, 0.25, 0.32, 0.92), 4.0)
+		_overlay.draw_line(ets, ete, Color(1.0, 0.92, 0.85, 0.90), 1.6)
+		_overlay.draw_circle(ete, 14.0, Color(1.0, 0.32, 0.25, 0.72))
+		_overlay.draw_circle(ete, 6.0, Color(1.0, 1.0, 1.0, 0.95))
+
 	if tracer_timer > 0.0:
 		var ts := _w2s(tracer_start)
 		var te := _w2s(tracer_end)
@@ -1185,12 +1439,22 @@ func _draw_sector_minimap(font: Font) -> void:
 	# Squad operative blips
 	for i in range(OPERATIVE_NODES.size()):
 		var op := get_node_or_null(OPERATIVE_NODES[i]) as Node2D
-		if op == null:
+		if op == null or not op.visible:
 			continue
 		var rel := (op.position - Vector2(640, 388)) * Vector2(0.042, 0.042)
 		var bp := mc + Vector2(clampf(rel.x, -82.0, 82.0), clampf(rel.y, -42.0, 42.0))
 		var oc := Color(0.25, 0.98, 1.0, 1.0) if i == selected_operative else Color(0.25, 0.92, 0.55, 0.9)
 		_overlay.draw_circle(bp, 3.0 if i == selected_operative else 2.2, oc)
+
+	# Rival syndicate operative blips (Zaibatsu Crimson & Chiba Triad Emerald)
+	for r_entry in _rival_operatives:
+		var rn: Node2D = r_entry["node"]
+		if rn == null or not rn.visible:
+			continue
+		var r_rel := (rn.position - Vector2(640, 388)) * Vector2(0.042, 0.042)
+		var r_bp := mc + Vector2(clampf(r_rel.x, -82.0, 82.0), clampf(r_rel.y, -42.0, 42.0))
+		var r_col: Color = r_entry["color"]
+		_overlay.draw_circle(r_bp, 2.2, r_col)
 
 	# Camera viewport indicator box on radar
 	var cam_p := _camera.position if _camera != null else Vector2(640, 360)
