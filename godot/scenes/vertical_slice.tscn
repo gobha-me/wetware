@@ -382,8 +382,10 @@ metadata/stratum = 0
 
 [node name="StreetTileRoot" type="Sprite2D" parent="."]
 material = SubResource("ShaderMaterial_street")
-position = Vector2(640, 396)
+position = Vector2(640, 388)
 texture = ExtResource("3_street_albedo")
+hframes = 13
+frame = 0
 metadata/stratum = 1
 
 [node name="BioFoundryTowerIntact" type="Sprite2D" parent="."]
@@ -409,7 +411,7 @@ metadata/stratum = 1
 
 [node name="ConcreteRiotBarricade" type="Sprite2D" parent="."]
 material = SubResource("ShaderMaterial_barricade")
-position = Vector2(544, 424)
+position = Vector2(490, 412)
 texture = ExtResource("63_barricade_albedo")
 hframes = 8
 frame = 2
@@ -473,7 +475,7 @@ metadata/stratum = 1
 
 [node name="CorpSecGuard1" type="Sprite2D" parent="."]
 material = SubResource("ShaderMaterial_guard")
-position = Vector2(736, 436)
+position = Vector2(768, 444)
 texture = ExtResource("75_guard_albedo")
 hframes = 8
 frame = 6
@@ -481,7 +483,7 @@ metadata/stratum = 1
 
 [node name="CorpSecGuard2" type="Sprite2D" parent="."]
 material = SubResource("ShaderMaterial_guard")
-position = Vector2(516, 376)
+position = Vector2(448, 384)
 texture = ExtResource("75_guard_albedo")
 hframes = 8
 frame = 2
@@ -489,7 +491,7 @@ metadata/stratum = 1
 
 [node name="MegacityCivilian1" type="Sprite2D" parent="."]
 material = SubResource("ShaderMaterial_civ")
-position = Vector2(604, 468)
+position = Vector2(624, 476)
 texture = ExtResource("78_civ_albedo")
 hframes = 8
 frame = 0
@@ -505,7 +507,7 @@ metadata/stratum = 1
 
 [node name="OperativeVex2" type="Sprite2D" parent="."]
 material = SubResource("ShaderMaterial_operative_street")
-position = Vector2(568, 396)
+position = Vector2(556, 424)
 texture = ExtResource("6_op_albedo")
 hframes = 8
 frame = 2
@@ -513,7 +515,7 @@ metadata/stratum = 1
 
 [node name="OperativeNull3" type="Sprite2D" parent="."]
 material = SubResource("ShaderMaterial_operative_street")
-position = Vector2(708, 396)
+position = Vector2(704, 388)
 texture = ExtResource("6_op_albedo")
 hframes = 8
 frame = 6
@@ -625,16 +627,16 @@ theme_override_font_sizes/font_size = 13
 text = "OP-1: KESTREL-1 [SPIRE]\nORGANS: V3 EYES | V3 BRAIN | V2 LEGS\nBIOCHEM I/P/A: 82% / 78% / 65%\nWEAPON: GAUSS CARBINE | THRALLS: 0"
 
 [node name="ObjectivesBg" type="ColorRect" parent="TacticalHud"]
-offset_left = 812.0
+offset_left = 740.0
 offset_top = 548.0
 offset_right = 1268.0
 offset_bottom = 708.0
 color = Color(0.04, 0.06, 0.1, 0.9)
 
 [node name="ObjectivesLabel" type="Label" parent="TacticalHud"]
-offset_left = 824.0
+offset_left = 752.0
 offset_top = 556.0
-offset_right = 1258.0
+offset_right = 1260.0
 offset_bottom = 702.0
 theme_override_colors/font_color = Color(0.75, 0.92, 0.88, 1)
 theme_override_font_sizes/font_size = 12
