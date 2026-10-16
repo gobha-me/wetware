@@ -102,6 +102,8 @@ var selected_operative: int = 0
 var active_weapon_index: int = 0
 var overclock_active: bool = false
 var tower_collapsed: bool = false
+var tower_structural_hp: int = 100
+var tower_damage_stage: int = 0 # 0=INTACT, 1=DAMAGED, 2=RUBBLE, 3=REBUILDING
 var transformer_sabotaged: bool = false
 var convoy_intercepted: bool = false
 var monorail_looted: bool = false
@@ -111,6 +113,14 @@ var salvage_units: int = 1
 var syndicate_treasury: int = 6000
 var last_digest: String = "0x9f4a2c18e7b03d11"
 var cryo_generation: int = 0
+
+# M12 Live C++23 Command Bridge & M14 In-Engine Spatial Audio State
+var _live_cpp_command_log: Array[String] = []
+var _ambient_player: AudioStreamPlayer = null
+var _sfx_player_2d: AudioStreamPlayer2D = null
+var _sfx_streams: Dictionary = {}
+var last_played_sfx: String = ""
+var sfx_play_count: int = 0
 
 # Interactive VFX state rendered on foreground TacticalOverlay inside TacticalHud
 var move_target_pos: Vector2 = Vector2.ZERO
@@ -191,6 +201,7 @@ func _ensure_m7_initialized() -> void:
 	_rebuild_meat_puppet_roster()
 	_configure_multi_pose_actors()
 	_populate_sector_grid()
+	_setup_spatial_audio()
 	var hq_script := load("res://scenes/hq_screens.gd") as GDScript
 	if hq_script != null:
 		_hq_screens = hq_script.new()
@@ -1654,6 +1665,129 @@ func _damage_street_vehicle_at(target_pos: Vector2, dmg: int) -> bool:
 					_refresh_hud()
 	return hit_any
 
+func _setup_spatial_audio() -> void:
+	if _ambient_player != null:
+		return
+	_ambient_player = AudioStreamPlayer.new()
+	_ambient_player.name = "AmbientSynthPlayer"
+	_ambient_player.volume_db = -9.0
+	_ambient_player.stream = _synthesize_sfx_wav("ambient", 1.2)
+	add_child(_ambient_player)
+
+	_sfx_player_2d = AudioStreamPlayer2D.new()
+	_sfx_player_2d.name = "TacticalSfxPlayer2D"
+	_sfx_player_2d.max_distance = 1800.0
+	_sfx_player_2d.attenuation = 1.15
+	add_child(_sfx_player_2d)
+
+	for s_name in ["gauss", "minigun", "plasma", "persuade", "collapse"]:
+		_sfx_streams[s_name] = _synthesize_sfx_wav(s_name, 0.28)
+
+func _synthesize_sfx_wav(kind: String, duration_sec: float) -> AudioStreamWAV:
+	var mix_rate := 11025
+	var samples := int(mix_rate * duration_sec)
+	var pcm := PackedByteArray()
+	pcm.resize(samples * 2)
+	for i in range(samples):
+		var t := float(i) / float(mix_rate)
+		var env := clampf(1.0 - (t / maxf(0.05, duration_sec)), 0.0, 1.0)
+		var sig := 0.0
+		match kind:
+			"ambient":
+				sig = 0.35 * sin(TAU * 55.0 * t) + 0.20 * sin(TAU * 110.0 * t)
+			"gauss":
+				sig = env * env * sin(TAU * (880.0 - 620.0 * t) * t)
+			"minigun":
+				var pulse := 1.0 if int(t * 28.0) % 2 == 0 else 0.2
+				sig = env * pulse * sin(TAU * 210.0 * t)
+			"plasma":
+				sig = env * (0.6 * sin(TAU * 140.0 * t) + 0.4 * sin(TAU * 420.0 * t))
+			"persuade":
+				sig = env * (0.5 * sin(TAU * 528.0 * t) + 0.5 * sin(TAU * 660.0 * t))
+			"collapse":
+				sig = env * (0.7 * sin(TAU * 48.0 * t) + 0.3 * cos(TAU * 93.0 * t))
+		var sample_i16 := clampi(int(sig * 14000.0), -32767, 32767)
+		pcm.encode_s16(i * 2, sample_i16)
+	var wav := AudioStreamWAV.new()
+	wav.format = AudioStreamWAV.FORMAT_16_BITS
+	wav.mix_rate = mix_rate
+	wav.stereo = false
+	wav.data = pcm
+	return wav
+
+func play_sfx(sfx_name: String, world_pos: Vector2 = Vector2(640, 360)) -> void:
+	last_played_sfx = sfx_name
+	sfx_play_count += 1
+	if _sfx_player_2d == null or not _sfx_streams.has(sfx_name):
+		return
+	_sfx_player_2d.position = world_pos
+	_sfx_player_2d.stream = _sfx_streams[sfx_name]
+	if DisplayServer.get_name() != "headless":
+		_sfx_player_2d.play()
+
+func dispatch_live_cpp_command(cmd_stmt: String, run_cli_binary: bool = false) -> bool:
+	if cmd_stmt.is_empty():
+		return false
+	_live_cpp_command_log.append(cmd_stmt)
+	# Deterministic FNV-1a 64-bit rolling digest over the live command log
+	var h: int = 0x57455457415245
+	var joined := ";".join(_live_cpp_command_log)
+	for idx in range(joined.length()):
+		h = ((h ^ joined.unicode_at(idx)) * 1099511628211) & 0x7FFFFFFFFFFFFFFF
+	last_digest = "0x%016x" % h
+
+	if run_cli_binary:
+		var cli_candidates := [
+			"/tmp/wetware-m12-build/wetware_cli",
+			"/tmp/wetware-build/wetware_cli",
+			ProjectSettings.globalize_path("res://../build/wetware_cli"),
+		]
+		for cli_path in cli_candidates:
+			if FileAccess.file_exists(cli_path):
+				var out := []
+				var code := OS.execute(cli_path, ["--commands", joined], out, false)
+				if code == 0 and not out.is_empty():
+					var parsed: Variant = JSON.parse_string(String(out[0]))
+					if valid_snapshot(parsed):
+						return apply_snapshot(parsed as Dictionary)
+				break
+	_refresh_hud()
+	return true
+
+func apply_tower_damage(dmg: int) -> void:
+	if tower_collapsed:
+		return
+	tower_structural_hp = maxi(0, tower_structural_hp - dmg)
+	if tower_structural_hp <= 0:
+		set_tower_collapsed(true)
+	elif tower_structural_hp <= 55:
+		set_tower_damage_stage(1)
+	else:
+		set_tower_damage_stage(0)
+
+func set_tower_damage_stage(stage: int) -> void:
+	tower_damage_stage = clampi(stage, 0, 3)
+	tower_collapsed = (tower_damage_stage == 2)
+	var intact_node := get_node_or_null("BioFoundryTowerIntact") as Sprite2D
+	var rubble_node := get_node_or_null("BioFoundryTowerRubble") as Sprite2D
+	if intact_node:
+		intact_node.visible = (tower_damage_stage != 2)
+		if intact_node.material is ShaderMaterial:
+			var smat := intact_node.material as ShaderMaterial
+			if tower_damage_stage == 1:
+				smat.set_shader_parameter("pulse_tint", Vector3(1.0, 0.38, 0.12))
+				smat.set_shader_parameter("pulse_intensity", 0.45)
+			elif tower_damage_stage == 3:
+				smat.set_shader_parameter("pulse_tint", Vector3(0.22, 0.92, 1.0))
+				smat.set_shader_parameter("pulse_intensity", 0.32)
+			else:
+				smat.set_shader_parameter("pulse_intensity", 0.0)
+	if rubble_node:
+		rubble_node.visible = (tower_damage_stage == 2)
+	if _hq_screens != null:
+		_hq_screens.queue_redraw()
+	_refresh_hud()
+
 func _fire_active_weapon_at(target_pos: Vector2) -> void:
 	var op_node := _get_selected_operative_node()
 	if op_node == null:
@@ -1670,15 +1804,23 @@ func _fire_active_weapon_at(target_pos: Vector2) -> void:
 	tracer_end = target_pos
 	tracer_timer = 0.28
 
-	var wpn_dmg := 100 if (active_weapon_index == 2 or active_weapon_index == 3) else 40
+	var wpn_dmg := 100 if (active_weapon_index == 2 or active_weapon_index == 3) else 50
 	if active_weapon_index == 2 or active_weapon_index == 3:
 		tracer_color = Color(1.0, 0.48, 0.18, 1.0)
+		play_sfx("plasma", target_pos)
+	elif active_weapon_index == 1:
+		tracer_color = Color(0.25, 0.95, 1.0, 1.0)
+		play_sfx("minigun", op_node.position)
 	else:
 		tracer_color = Color(0.25, 0.95, 1.0, 1.0)
+		play_sfx("gauss", op_node.position)
 
+	dispatch_live_cpp_command("fire:%d:%d:%d:8:8:%d" % [
+		selected_operative, focus_district_id, active_weapon_index + 1, int(active_stratum)
+	])
 	_damage_street_vehicle_at(target_pos, wpn_dmg)
 	if target_pos.distance_to(Vector2(640, 292)) < 110.0 and not tower_collapsed:
-		set_tower_collapsed(true)
+		apply_tower_damage(wpn_dmg)
 	_request_overlay_redraw()
 
 func _trigger_persuadertron_wave() -> void:
@@ -1688,6 +1830,8 @@ func _trigger_persuadertron_wave() -> void:
 	persuade_origin = op_node.position
 	persuade_timer = 0.55
 	target_pulse_timer = 0.45
+	play_sfx("persuade", op_node.position)
+	dispatch_live_cpp_command("persuade:%d:%d" % [selected_operative, focus_district_id])
 	if not crowd_surge_active:
 		crowd_surge_active = true
 		thrall_count = 14
@@ -1726,6 +1870,8 @@ func _toggle_transformer_sabotage() -> void:
 	transformer_sabotaged = not transformer_sabotaged
 	var blackout := 0.52 if transformer_sabotaged else 1.0
 	_set_global_blackout(blackout)
+	if transformer_sabotaged:
+		dispatch_live_cpp_command("sabotage:%d" % focus_district_id)
 	_refresh_hud()
 
 func _intercept_executive_convoy() -> void:
@@ -1734,6 +1880,7 @@ func _intercept_executive_convoy() -> void:
 		syndicate_treasury += 1500
 		salvage_units += 1
 		target_pulse_timer = 0.45
+		dispatch_live_cpp_command("convoy:%d" % focus_district_id)
 		var limo := get_node_or_null("ExecutiveArmoredLimo") as Sprite2D
 		if limo and limo.material is ShaderMaterial:
 			(limo.material as ShaderMaterial).set_shader_parameter("pulse_tint", Vector3(1.0, 0.35, 0.1))
@@ -1745,6 +1892,7 @@ func _loot_monorail_wreck() -> void:
 		monorail_looted = true
 		syndicate_treasury += 2500
 		salvage_units += 1
+		dispatch_live_cpp_command("monorail:%d" % focus_district_id)
 		_refresh_hud()
 
 func _execute_contextual_objective() -> void:
@@ -1892,7 +2040,7 @@ func apply_snapshot(data: Dictionary) -> bool:
 		var b_did := int(bld.get("district_id", 1))
 		var is_organ := bool(bld.get("houses_city_organ", int(bld["id"]) == 10))
 		if b_did == focus_district_id and is_organ:
-			set_tower_collapsed(int(bld["state"]) == 2)
+			set_tower_damage_stage(int(bld["state"]))
 		elif b_did == focus_district_id and int(bld["state"]) == 2:
 			non_organ_collapsed += 1
 	set_surrounding_blocks_collapsed(non_organ_collapsed * 3)
@@ -1932,16 +2080,11 @@ func apply_snapshot(data: Dictionary) -> bool:
 	return true
 
 func set_tower_collapsed(collapsed: bool) -> void:
-	tower_collapsed = collapsed
-	var intact_node := get_node_or_null("BioFoundryTowerIntact") as CanvasItem
-	var rubble_node := get_node_or_null("BioFoundryTowerRubble") as CanvasItem
-	if intact_node:
-		intact_node.visible = not collapsed
-	if rubble_node:
-		rubble_node.visible = collapsed
-	if _hq_screens != null:
-		_hq_screens.queue_redraw()
-	_refresh_hud()
+	if collapsed and not tower_collapsed:
+		play_sfx("collapse", Vector2(640, 292))
+		dispatch_live_cpp_command("shear:%d:4" % (focus_district_id * 10))
+	tower_structural_hp = 0 if collapsed else 100
+	set_tower_damage_stage(2 if collapsed else 0)
 
 func _apply_stratum_cutaway(focus_stratum: Stratum) -> void:
 	active_stratum = focus_stratum
@@ -2002,7 +2145,7 @@ func _refresh_hud() -> void:
 	var hud_label := get_node_or_null("TacticalHud/HudTelemetryLabel") as Label
 	if hud_label != null:
 		var stratum_name: String = STRATUM_NAMES.get(int(active_stratum), "STREET")
-		var organ_state := "RUBBLE" if tower_collapsed else "INTACT"
+		var organ_state := "RUBBLE" if tower_collapsed else ("DAMAGED" if tower_damage_stage == 1 else ("REBUILDING" if tower_damage_stage == 3 else "INTACT"))
 		var oc_state := "OVERCLOCK 0.25x" if overclock_active else "NOMINAL 1.00x"
 		var grid_power := "BLACKOUT" if transformer_sabotaged else "GRID ONLINE"
 		hud_label.text = ("CR: %d | STRATUM: %s | " + focus_organ_name + ": %s | %s | %s | DIGEST: %s") % [

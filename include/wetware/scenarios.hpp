@@ -31,6 +31,12 @@ DistrictId run_scorched_earth_scenario(MegacitySimulation& sim);
 // overclock flatline, squadmate organ harvest, and cryo-replacement thaw.
 DistrictId run_three_way_clash_scenario(MegacitySimulation& sim);
 
+// Executes a semicolon- or newline-delimited live command script against the
+// authoritative simulation and returns the active focus district (or
+// std::nullopt if any command opcode is malformed).
+std::optional<DistrictId> run_command_script(std::string_view script,
+                                             MegacitySimulation& sim);
+
 } // namespace wetware
 
 #endif // WETWARE_SCENARIOS_HPP

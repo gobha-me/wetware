@@ -1,6 +1,9 @@
 #include "wetware/scenarios.hpp"
 
+#include <charconv>
 #include <cstdint>
+#include <string>
+#include <vector>
 
 namespace wetware {
 
@@ -15,6 +18,40 @@ constexpr BuildingId kKowloonVatTower = 10;
 constexpr BuildingId kKowloonArcade = 11;
 constexpr BuildingId kShinjukuSpire = 20;
 constexpr BuildingId kNeoRuhrSmelter = 40;
+
+std::string_view trim_sv(std::string_view sv) noexcept {
+  while (!sv.empty() &&
+         (sv.front() == ' ' || sv.front() == '\t' || sv.front() == '\r')) {
+    sv.remove_prefix(1);
+  }
+  while (!sv.empty() &&
+         (sv.back() == ' ' || sv.back() == '\t' || sv.back() == '\r')) {
+    sv.remove_suffix(1);
+  }
+  return sv;
+}
+
+std::vector<std::string_view> split_sv(std::string_view sv, char delim) {
+  std::vector<std::string_view> out;
+  std::size_t start = 0;
+  while (start <= sv.size()) {
+    const std::size_t pos = sv.find(delim, start);
+    if (pos == std::string_view::npos) {
+      out.push_back(trim_sv(sv.substr(start)));
+      break;
+    }
+    out.push_back(trim_sv(sv.substr(start, pos - start)));
+    start = pos + 1;
+  }
+  return out;
+}
+
+bool parse_i64(std::string_view sv, std::int64_t& out) noexcept {
+  sv = trim_sv(sv);
+  if (sv.empty()) return false;
+  const auto [ptr, ec] = std::from_chars(sv.data(), sv.data() + sv.size(), out);
+  return ec == std::errc{} && ptr == sv.data() + sv.size();
+}
 
 void set_full_loadout(OperativeState& op, CyberTier tier) {
   for (const auto slot :
@@ -45,6 +82,162 @@ void fire(MegacitySimulation& sim, SyndicateId syndicate,
       .weapon = weapon,
       .target_coord = GridCoord{x, y, stratum},
   });
+}
+
+bool execute_script_statement(std::string_view stmt, MegacitySimulation& sim,
+                              DistrictId& focus) {
+  const auto args = split_sv(stmt, ':');
+  if (args.empty() || args[0].empty()) return true;
+  const std::string_view op = args[0];
+
+  auto arg_i64 = [&](std::size_t idx, std::int64_t fallback = 0) {
+    std::int64_t val = fallback;
+    if (idx < args.size()) {
+      (void)parse_i64(args[idx], val);
+    }
+    return val;
+  };
+
+  if (op == "focus" && args.size() >= 2) {
+    const auto did = arg_i64(1, 1);
+    if (did >= 1 && did <= 6) {
+      focus = static_cast<DistrictId>(did);
+      return true;
+    }
+    return false;
+  }
+  if (op == "overclock" && args.size() >= 2) {
+    return sim.apply_command(CommandTriggerOverclock{
+        .syndicate_id = kEuroCorp, .active = (arg_i64(1, 0) != 0)});
+  }
+  if (op == "deploy" && args.size() >= 6) {
+    const auto op_idx = static_cast<std::size_t>(arg_i64(1, 0));
+    const auto bld_id = static_cast<BuildingId>(arg_i64(2, 10));
+    const auto gx = static_cast<std::int32_t>(arg_i64(3, 4));
+    const auto gy = static_cast<std::int32_t>(arg_i64(4, 4));
+    const auto st = static_cast<Stratum>(arg_i64(5, 1));
+    return sim.apply_command(CommandDeployOperative{
+        .syndicate_id = kEuroCorp,
+        .operative_index = op_idx,
+        .building_id = bld_id,
+        .coord = GridCoord{gx, gy, st},
+    });
+  }
+  if (op == "fire" && args.size() >= 7) {
+    const auto op_idx = static_cast<std::size_t>(arg_i64(1, 0));
+    const auto did = static_cast<DistrictId>(arg_i64(2, focus));
+    const auto wpn = static_cast<WeaponId>(arg_i64(3, 1));
+    const auto gx = static_cast<std::int32_t>(arg_i64(4, 8));
+    const auto gy = static_cast<std::int32_t>(arg_i64(5, 8));
+    const auto st = static_cast<Stratum>(arg_i64(6, 1));
+    return sim.apply_command(CommandFireOrdinance{
+        .attacker_syndicate_id = kEuroCorp,
+        .operative_index = op_idx,
+        .district_id = did,
+        .weapon = wpn,
+        .target_coord = GridCoord{gx, gy, st},
+    });
+  }
+  if (op == "shear" && args.size() >= 3) {
+    const auto bld_id = static_cast<BuildingId>(arg_i64(1, 10));
+    const auto cols = static_cast<std::uint32_t>(arg_i64(2, 4));
+    return sim.apply_command(CommandShearColumns{
+        .building_id = bld_id,
+        .stratum = Stratum::Street,
+        .columns_destroyed = cols,
+    });
+  }
+  if (op == "rebuild" && args.size() >= 2) {
+    const auto bld_id = static_cast<BuildingId>(arg_i64(1, 10));
+    return sim.apply_command(
+        CommandFundRebuild{.syndicate_id = kEuroCorp, .building_id = bld_id});
+  }
+  if (op == "sabotage" && args.size() >= 2) {
+    const auto did = static_cast<DistrictId>(arg_i64(1, focus));
+    return sim.apply_command(CommandSabotageTransformer{
+        .syndicate_id = kEuroCorp, .operative_index = 3, .district_id = did});
+  }
+  if (op == "convoy" && args.size() >= 2) {
+    const auto did = static_cast<DistrictId>(arg_i64(1, focus));
+    return sim.apply_command(CommandInterceptExecutiveConvoy{
+        .syndicate_id = kEuroCorp, .operative_index = 1, .district_id = did});
+  }
+  if (op == "monorail" && args.size() >= 2) {
+    const auto did = static_cast<DistrictId>(arg_i64(1, focus));
+    return sim.apply_command(CommandLootMonorailWreck{
+        .syndicate_id = kEuroCorp, .operative_index = 2, .district_id = did});
+  }
+  if (op == "persuade" && args.size() >= 3) {
+    const auto op_idx = static_cast<std::size_t>(arg_i64(1, 2));
+    const auto did = static_cast<DistrictId>(arg_i64(2, focus));
+    for (std::uint32_t cid = 8201; cid <= 8206; ++cid) {
+      sim.attempt_persuade(kEuroCorp, op_idx, cid,
+                           PersuadeTargetClass::Civilian, did, Stratum::Street,
+                           ThrallDirective::CrowdSurge);
+    }
+    return true;
+  }
+  if (op == "organ" && args.size() >= 4) {
+    auto* euro = sim.find_syndicate_mut(kEuroCorp);
+    const auto op_idx = static_cast<std::size_t>(arg_i64(1, 0));
+    const auto slot = static_cast<OrganSlot>(arg_i64(2, 0));
+    const auto tier = static_cast<CyberTier>(arg_i64(3, 2));
+    if (euro == nullptr || op_idx >= euro->squad.size()) return false;
+    euro->squad.at(op_idx).set_organ_tier(slot, tier);
+    return true;
+  }
+  if (op == "research" && args.size() >= 3) {
+    const auto bp_id = static_cast<BlueprintId>(arg_i64(1, 1));
+    const auto budget = static_cast<Credits>(arg_i64(2, 350));
+    return sim.apply_command(CommandAllocateResearch{
+        .syndicate_id = kEuroCorp,
+        .blueprint_id = bp_id,
+        .daily_budget = budget,
+    });
+  }
+  if (op == "salvage_add" && args.size() >= 3) {
+    const auto bp_id = static_cast<BlueprintId>(arg_i64(1, 1));
+    const auto qty = static_cast<std::uint32_t>(arg_i64(2, 1));
+    return sim.apply_command(CommandSalvageFieldHardware{
+        .syndicate_id = kEuroCorp, .blueprint_id = bp_id, .quantity = qty});
+  }
+  if (op == "salvage_use" && args.size() >= 4) {
+    const auto bp_id = static_cast<BlueprintId>(arg_i64(1, 1));
+    const bool rev = (arg_i64(2, 0) != 0);
+    const auto op_idx = static_cast<std::size_t>(arg_i64(3, 0));
+    return sim.apply_command(CommandUseSalvage{
+        .syndicate_id = kEuroCorp,
+        .blueprint_id = bp_id,
+        .reverse_engineer = rev,
+        .operative_index = op_idx,
+    });
+  }
+  if (op == "thaw" && args.size() >= 3) {
+    const auto op_idx = static_cast<std::size_t>(arg_i64(1, 0));
+    return sim.apply_command(CommandThawCryoReplacement{
+        .syndicate_id = kEuroCorp,
+        .operative_index = op_idx,
+        .new_callsign = std::string(args[2]),
+    });
+  }
+  if (op == "raid" && args.size() >= 3) {
+    const auto did = static_cast<DistrictId>(arg_i64(1, focus));
+    const bool scorched = (arg_i64(2, 0) != 0);
+    (void)sim.resolve_district_raid(kEuroCorp, did, scorched);
+    focus = did;
+    return true;
+  }
+  if (op == "step_day") {
+    const auto ticks = arg_i64(1, 1);
+    for (std::int64_t t = 0; t < ticks; ++t) {
+      sim.step_tick();
+      (void)sim.step_rival_ai(kZaibatsu);
+      (void)sim.step_rival_ai(kTriad);
+      (void)sim.step_rival_ai(kOmni);
+    }
+    return true;
+  }
+  return false;
 }
 
 } // namespace
@@ -176,6 +369,20 @@ DistrictId run_three_way_clash_scenario(MegacitySimulation& sim) {
                                       .reverse_engineer = false,
                                       .operative_index = 1});
   return kKowloon;
+}
+
+std::optional<DistrictId> run_command_script(std::string_view script,
+                                             MegacitySimulation& sim) {
+  DistrictId focus = 1;
+  for (const auto line : split_sv(script, '\n')) {
+    for (const auto stmt : split_sv(line, ';')) {
+      if (stmt.empty() || stmt.front() == '#') continue;
+      if (!execute_script_statement(stmt, sim, focus)) {
+        return std::nullopt;
+      }
+    }
+  }
+  return focus;
 }
 
 std::optional<DistrictId> run_scenario(std::string_view name,
