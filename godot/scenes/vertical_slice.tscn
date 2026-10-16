@@ -353,7 +353,7 @@ material = SubResource("ShaderMaterial_xfmr")
 position = Vector2(360, 528)
 texture = ExtResource("33_xfmr_albedo")
 hframes = 8
-frame = 1
+frame = 2
 metadata/stratum = 0
 
 [node name="CryoStasisVat" type="Sprite2D" parent="."]
@@ -406,7 +406,7 @@ material = SubResource("ShaderMaterial_gate")
 position = Vector2(448, 344)
 texture = ExtResource("66_gate_albedo")
 hframes = 8
-frame = 1
+frame = 2
 metadata/stratum = 1
 
 [node name="ConcreteRiotBarricade" type="Sprite2D" parent="."]
@@ -419,47 +419,47 @@ metadata/stratum = 1
 
 [node name="StreetVendingMachineBank" type="Sprite2D" parent="."]
 material = SubResource("ShaderMaterial_vending")
-position = Vector2(776, 332)
+position = Vector2(768, 344)
 texture = ExtResource("69_vending_albedo")
 hframes = 8
-frame = 5
+frame = 4
 metadata/stratum = 1
 
 [node name="CyberClinicMedPod" type="Sprite2D" parent="."]
 material = SubResource("ShaderMaterial_medpod")
-position = Vector2(842, 368)
+position = Vector2(832, 376)
 texture = ExtResource("45_medpod_albedo")
 hframes = 8
-frame = 1
+frame = 2
 metadata/stratum = 1
 
 [node name="SyndicateApc" type="Sprite2D" parent="."]
 material = SubResource("ShaderMaterial_apc")
-position = Vector2(332, 420)
+position = Vector2(320, 408)
 texture = ExtResource("21_apc_albedo")
 hframes = 8
-frame = 2
+frame = 4
 metadata/stratum = 1
 
 [node name="AutonomousCargoHauler" type="Sprite2D" parent="."]
 material = SubResource("ShaderMaterial_hauler")
-position = Vector2(248, 368)
+position = Vector2(384, 312)
 texture = ExtResource("57_hauler_albedo")
-hframes = 8
-frame = 3
-metadata/stratum = 1
-
-[node name="ExecutiveArmoredLimo" type="Sprite2D" parent="."]
-material = SubResource("ShaderMaterial_limo")
-position = Vector2(476, 464)
-texture = ExtResource("39_limo_albedo")
 hframes = 8
 frame = 2
 metadata/stratum = 1
 
+[node name="ExecutiveArmoredLimo" type="Sprite2D" parent="."]
+material = SubResource("ShaderMaterial_limo")
+position = Vector2(416, 456)
+texture = ExtResource("39_limo_albedo")
+hframes = 8
+frame = 4
+metadata/stratum = 1
+
 [node name="CorpSecurityInterceptor" type="Sprite2D" parent="."]
 material = SubResource("ShaderMaterial_interceptor")
-position = Vector2(812, 460)
+position = Vector2(832, 472)
 texture = ExtResource("42_interceptor_albedo")
 hframes = 8
 frame = 6
@@ -563,7 +563,7 @@ material = SubResource("ShaderMaterial_hvac")
 position = Vector2(764, 172)
 texture = ExtResource("72_hvac_albedo")
 hframes = 8
-frame = 1
+frame = 2
 metadata/stratum = 2
 
 [node name="QuadHunterKillerDrone" type="Sprite2D" parent="."]

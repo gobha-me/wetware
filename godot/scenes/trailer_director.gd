@@ -103,15 +103,14 @@ func _step_act_1(f: int) -> void:
 		sector.set_banner("ACT I // KOWLOON STREET DEPLOYMENT, PROXIMITY CUTAWAY & LIMO AMBUSH")
 	elif f > 361 and f < 900:
 		var limo := sector.get_node_or_null("ExecutiveArmoredLimo") as Sprite2D
-		if limo and not sector.convoy_intercepted:
-			limo.position += Vector2(0.28, 0.14)
+		var limo_aim := limo.position if limo != null else Vector2(460, 478)
 		var null_op := sector.get_node_or_null("OperativeNull3") as Sprite2D
 		if null_op and f < 620:
 			var nd := Vector2(-0.35, 0.22)
 			null_op.position += nd
 			sector._update_sprite_facing(null_op, nd)
 		if f in [440, 510, 580, 640]:
-			sector._fire_active_weapon_at(Vector2(498, 474))
+			sector._fire_active_weapon_at(limo_aim)
 		if f == 520:
 			sector.active_weapon_index = 1
 			sector._update_operative_card()
