@@ -769,6 +769,167 @@ def generate_isometric_corp_block(src_path: Path) -> tuple[int, int, list[RGBA],
     return w, h, albedo, emissive
 
 
+def generate_isometric_block_rubble() -> tuple[int, int, list[RGBA], list[RGBA]]:
+    """Generates a 256x256 locked 2:1 isometric collapsed building ruin with jagged concrete walls, rebar, and glowing slag."""
+    w, h = 256, 256
+    albedo: list[RGBA] = [(0, 0, 0, 0)] * (w * h)
+    emissive: list[RGBA] = [(0, 0, 0, 0)] * (w * h)
+
+    cx, cy = 128, 242
+    hw, hd = 104, 52
+
+    # 1. Isometric Rubble Pile Base & Crater Interior
+    for y in range(cy - hd * 2 - 16, cy + 4):
+        for x in range(cx - hw - 4, cx + hw + 4):
+            if not (0 <= x < w and 0 <= y < h):
+                continue
+            dx = (x - cx) / float(hw)
+            dy = (y - (cy - hd)) / float(hd)
+            md = abs(dx) + abs(dy)
+            if md <= 1.04:
+                n1 = hash2d(x // 3, y // 2, 701)
+                n2 = hash2d(x, y, 709)
+                idx = y * w + x
+                if md < 0.48 and n1 > 0.36:
+                    # Glowing molten slag & fire fissures inside the collapsed core
+                    if n2 > 0.62:
+                        albedo[idx] = (255, 148, 36, 255)
+                        emissive[idx] = (255, 148, 36, 235)
+                    elif n2 > 0.38:
+                        albedo[idx] = (210, 68, 24, 255)
+                        emissive[idx] = (220, 78, 28, 195)
+                    else:
+                        c = clamp8(26 + n2 * 18)
+                        albedo[idx] = (c + 8, c + 4, c, 255)
+                else:
+                    # Broken ferro-concrete chunks & charred debris
+                    chunk = int(n1 * 4.0)
+                    base_c = 28 + chunk * 11 + int((n2 - 0.5) * 10)
+                    r = clamp8(base_c)
+                    g = clamp8(base_c + 4)
+                    b = clamp8(base_c + 10)
+                    albedo[idx] = (r, g, b, 255)
+                    if n1 > 0.86 and n2 > 0.78 and md < 0.82:
+                        albedo[idx] = (245, 112, 28, 255)
+                        emissive[idx] = (245, 112, 28, 210)
+
+    # 2. Sheared 1-Story Jagged Perimeter Walls & Exposed Bent Rebar
+    for x in range(cx - hw, cx + hw):
+        if x < cx:
+            t = (x - (cx - hw)) / float(hw)
+            y_bot = int(round((cy - hd) + t * hd))
+            shade = 0.94
+        else:
+            t = (x - cx) / float(hw)
+            y_bot = int(round(cy - t * hd))
+            shade = 0.72
+
+        col_hash = hash2d(x // 4, 17, 811)
+        fine_hash = hash2d(x, 31, 823)
+        jagged_h = int(18 + col_hash * 26 + fine_hash * 8)
+        # Deep breach gap near the center of each wall
+        if 0.35 < t < 0.65:
+            jagged_h = max(8, jagged_h - 16)
+        y_top = y_bot - jagged_h
+
+        for y in range(max(0, y_top), min(h, y_bot)):
+            idx = y * w + x
+            gn = (hash2d(x, y, 839) - 0.5) * 14.0
+            if y < y_top + 3:
+                # Fractured concrete lip
+                c = clamp8((62 + gn) * shade)
+            else:
+                c = clamp8((44 + gn) * shade)
+            albedo[idx] = (c, clamp8(c + 5), clamp8(c + 11), 255)
+            # Glowing ember cracks near the sheared wall lip
+            if y_top + 2 <= y <= y_top + 5 and hash2d(x // 2, y // 2, 853) > 0.82:
+                albedo[idx] = (245, 110, 28, 255)
+                emissive[idx] = (245, 110, 28, 215)
+
+        # Exposed rebar spikes sticking up from fractured wall columns
+        if x % 9 == 0 and col_hash > 0.35:
+            rebar_h = 6 + int(col_hash * 8)
+            for ry in range(max(0, y_top - rebar_h), y_top):
+                rx = min(w - 1, max(0, x + (1 if ry < y_top - rebar_h // 2 else 0)))
+                albedo[ry * w + rx] = (92, 68, 54, 255)
+
+    return w, h, albedo, emissive
+
+
+def process_venice_landmark(
+    nobg_path: Path,
+    target_w: int,
+    target_h: int,
+    is_rubble: bool,
+    organ_kind: str,
+) -> tuple[list[RGBA], list[RGBA]]:
+    """Processes a 256x288 City Organ Landmark (intact or collapsed rubble) with district-specific emissive masks."""
+    sw, sh, raw_px = read_rgba_png(nobg_path)
+    cleaned_px = [clean_magenta_spill(r, g, b, a) for (r, g, b, a) in raw_px]
+    nw, nh, resized_px = crop_and_resize_nearest(sw, sh, cleaned_px, target_w - 8, target_h - 8)
+
+    albedo: list[RGBA] = [(0, 0, 0, 0)] * (target_w * target_h)
+    emissive: list[RGBA] = [(0, 0, 0, 0)] * (target_w * target_h)
+    ox = (target_w - nw) // 2
+    oy = target_h - nh - 4
+
+    for py in range(nh):
+        y_frac = py / float(max(1, nh - 1))
+        for px in range(nw):
+            cr, cg, cb, ca = resized_px[py * nw + px]
+            if ca < 32:
+                continue
+
+            tx = ox + px
+            ty = oy + py
+
+            if is_rubble:
+                # Shear the upper 38%..48% of the tower along a jagged collapse contour so rubble is unmistakably lower
+                x_dist = abs((px / float(max(1, nw - 1))) - 0.5) * 2.0
+                col_n = hash2d(tx // 4, 19, 911)
+                fine_n = hash2d(tx, 37, 929)
+                cut_frac = 0.36 + x_dist * 0.14 + col_n * 0.10 + fine_n * 0.03
+                if y_frac < cut_frac:
+                    # Leave occasional bent rebar rods protruding just above the shear line
+                    if tx % 7 == 0 and (cut_frac - y_frac) < 0.055 and col_n > 0.4:
+                        idx = ty * target_w + tx
+                        albedo[idx] = (88, 66, 52, 255)
+                    continue
+
+                # Darken/char the surviving lower ruin and inject glowing fracture embers near the shear line
+                soot = 0.68 if (y_frac - cut_frac) > 0.04 else 0.82
+                cr = clamp8(cr * soot)
+                cg = clamp8(cg * soot)
+                cb = clamp8(cb * soot)
+
+                if (y_frac - cut_frac) < 0.055 and hash2d(tx // 2, ty // 2, 947) > 0.58:
+                    cr, cg, cb = 255, 132, 32
+
+            idx = ty * target_w + tx
+            albedo[idx] = (cr, cg, cb, 255)
+
+            # District-specific emissive mask extraction
+            is_fire_slag = cr > 190 and cg > 75 and cb < 95 and (cr - cb) > 105
+            is_cyan_arc = cb > 180 and cg > 135 and (cb - cr) > 45
+            is_magenta_neon = cr > 165 and cb > 145 and cg < 115
+            is_gold_amber = cr > 180 and cg > 120 and cb < 105 and (cr - cb) > 85
+
+            if is_rubble and is_fire_slag:
+                emissive[idx] = (255, max(110, cg), 32, 235)
+            elif organ_kind == "broadcast_spire" and (is_cyan_arc or is_magenta_neon):
+                emissive[idx] = (cr, cg, cb, 220 if not is_rubble else 165)
+            elif organ_kind == "monorail_hub" and (is_cyan_arc or is_magenta_neon or is_gold_amber):
+                emissive[idx] = (cr, cg, cb, 215 if not is_rubble else 160)
+            elif organ_kind == "ordinance_foundry" and (is_fire_slag or is_gold_amber):
+                emissive[idx] = (cr, cg, cb, 235)
+            elif organ_kind == "power_subgrid" and (is_cyan_arc or is_fire_slag):
+                emissive[idx] = (cr, cg, cb, 230 if not is_rubble else 185)
+            elif organ_kind == "clearinghouse" and (is_gold_amber or is_fire_slag):
+                emissive[idx] = (cr, cg, cb, 215 if not is_rubble else 175)
+
+    return albedo, emissive
+
+
 def save_portrait_square(src_path: Path, dst_path: Path, size: int = 256) -> None:
     sw, sh, raw_px = read_rgba_png(src_path)
     cw, ch, c_px = crop_and_resize_nearest(sw, sh, raw_px, size, size)
@@ -806,6 +967,7 @@ def main() -> None:
     normals_dir = repo_root / "godot" / "assets" / "normals"
     venice_dir = Path("/tmp/venice_buildings")
     venice_m7_dir = Path("/tmp/venice_m7")
+    venice_m9_dir = Path("/tmp/venice_m9")
 
     for mode, stem in (
         ("undergrid", "undergrid_grate"),
@@ -829,6 +991,25 @@ def main() -> None:
         )
         save_asset_triplet(tiles_dir, normals_dir, "biofoundry_tower_rubble", 256, 288, b_rubble_a, b_rubble_e)
 
+    # 5 Remaining District City Organ Landmarks (intact & collapsed rubble)
+    landmark_specs = [
+        ("broadcast_spire", "broadcast_spire_intact_nobg.png", "broadcast_spire_rubble_nobg.png"),
+        ("monorail_hub", "monorail_hub_intact_nobg.png", "monorail_hub_rubble_nobg.png"),
+        ("ordinance_foundry", "ordinance_foundry_intact_nobg.png", "ordinance_foundry_rubble_nobg.png"),
+        # Use power_subgrid_intact_nobg.png for the sheared rubble state so the 3-Tesla-coil architecture matches!
+        ("power_subgrid", "power_subgrid_intact_nobg.png", "power_subgrid_intact_nobg.png"),
+        ("clearinghouse", "clearinghouse_intact_nobg.png", "clearinghouse_rubble_nobg.png"),
+    ]
+    for organ_kind, intact_file, rubble_file in landmark_specs:
+        intact_src = venice_m9_dir / intact_file
+        if intact_src.exists():
+            la, le = process_venice_landmark(intact_src, 256, 288, is_rubble=False, organ_kind=organ_kind)
+            save_asset_triplet(tiles_dir, normals_dir, f"{organ_kind}_intact", 256, 288, la, le)
+        rubble_src = venice_m9_dir / rubble_file
+        if rubble_src.exists():
+            ra, re = process_venice_landmark(rubble_src, 256, 288, is_rubble=True, organ_kind=organ_kind)
+            save_asset_triplet(tiles_dir, normals_dir, f"{organ_kind}_rubble", 256, 288, ra, re)
+
     if (venice_m7_dir / "city_tenement_nobg.png").exists():
         tw, th, t_alb, t_emi = generate_isometric_tenement_block(venice_m7_dir / "city_tenement_nobg.png")
         save_asset_triplet(tiles_dir, normals_dir, "city_block_tenement", tw, th, t_alb, t_emi)
@@ -836,6 +1017,9 @@ def main() -> None:
     if (venice_m7_dir / "city_corp_nobg.png").exists():
         cw, ch, c_alb, c_emi = generate_isometric_corp_block(venice_m7_dir / "city_corp_nobg.png")
         save_asset_triplet(tiles_dir, normals_dir, "city_block_corp", cw, ch, c_alb, c_emi)
+
+    rw, rh, r_alb, r_emi = generate_isometric_block_rubble()
+    save_asset_triplet(tiles_dir, normals_dir, "city_block_rubble", rw, rh, r_alb, r_emi)
 
     for arch, stem, nobg_candidate in (
         ("operative", "operative_trenchcoat", venice_dir / "operative_nobg.png"),
@@ -860,9 +1044,10 @@ def main() -> None:
         if p_src.exists():
             save_portrait_square(p_src, p_dst, 256)
 
-    print("Generated 8x4 multi-pose animated character sheets, M/F rigs, city block buildings, and cryo portraits.")
+    print("Generated all 6 district landmarks (intact & rubble), city_block_rubble, character sheets, and cryo portraits.")
 
 
 if __name__ == "__main__":
     main()
+
 

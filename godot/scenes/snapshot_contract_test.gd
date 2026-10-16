@@ -10,6 +10,10 @@ func _initialize() -> void:
 
 	var default_data: Variant = _load_json(args[0])
 	var collapse_data: Variant = _load_json(args[1])
+	if typeof(default_data) != TYPE_DICTIONARY or typeof(collapse_data) != TYPE_DICTIONARY:
+		push_error("Failed to parse default or collapse snapshot JSON")
+		quit(1)
+		return
 
 	var scene_packed := load("res://scenes/vertical_slice.tscn") as PackedScene
 	if scene_packed == null:
@@ -87,6 +91,66 @@ func _initialize() -> void:
 	var portrait_rect := sector.get_node_or_null("TacticalHud/PortraitRect") as TextureRect
 	if portrait_rect == null or portrait_rect.texture == null:
 		push_error("Missing Venice operative portrait in TacticalHud")
+		quit(1)
+		return
+
+	# Verify M9: All 6 District City Organ Landmarks (intact & rubble) + surrounding block rubble
+	var intact_node := sector.get_node_or_null("BioFoundryTowerIntact") as Sprite2D
+	var rubble_node := sector.get_node_or_null("BioFoundryTowerRubble") as Sprite2D
+	for did in range(1, 7):
+		sector.set_focus_district(did)
+		if sector.focus_district_id != did or sector.focus_organ_placeholder:
+			push_error("District %d landmark failed to clear placeholder flag" % did)
+			quit(1)
+			return
+		if intact_node == null or intact_node.texture == null or intact_node.texture.get_size() != Vector2(256, 288):
+			push_error("District %d intact landmark texture missing or wrong dimensions" % did)
+			quit(1)
+			return
+		if rubble_node == null or rubble_node.texture == null or rubble_node.texture.get_size() != Vector2(256, 288):
+			push_error("District %d rubble landmark texture missing or wrong dimensions" % did)
+			quit(1)
+			return
+	sector.set_focus_district(1)
+	sector.set_surrounding_blocks_collapsed(3)
+	var b1: Sprite2D = sector._city_buildings[1]
+	if b1 == null or b1.texture == null or b1.texture.get_size() != Vector2(256, 256):
+		push_error("city_block_rubble texture missing or wrong dimensions")
+		quit(1)
+		return
+	sector.set_surrounding_blocks_collapsed(0)
+
+	# Verify M9: All 3 Interactive Strategic HQ Screens (Megacity Map, Ripperdoc Bay, 3-Path R&D Lab)
+	if sector._hq_screens == null:
+		push_error("HqScreens node not initialized")
+		quit(1)
+		return
+	for hq_mode in [1, 2, 3, 0]:
+		sector.set_hq_screen(hq_mode)
+		if sector.get_hq_screen() != hq_mode:
+			push_error("Failed to switch HqScreen to mode %d" % hq_mode)
+			quit(1)
+			return
+	sector.syndicate_treasury = 5000
+	sector.salvage_units = 2
+	if not sector._hq_screens.upgrade_selected_organ():
+		push_error("Ripperdoc organ upgrade failed")
+		quit(1)
+		return
+	if not sector._hq_screens.thaw_cryo_replacement():
+		push_error("Ripperdoc cryo-vat thaw failed")
+		quit(1)
+		return
+	if not sector._hq_screens.fund_selected_blueprint():
+		push_error("R&D blueprint funding failed")
+		quit(1)
+		return
+	if not sector._hq_screens.reverse_engineer_salvage_unit():
+		push_error("Cryo-vault salvage +50% reverse-engineering failed")
+		quit(1)
+		return
+	if not sector._hq_screens.equip_salvage_unit():
+		push_error("Cryo-vault salvage direct equip failed")
 		quit(1)
 		return
 

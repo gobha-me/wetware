@@ -241,6 +241,13 @@ func _sync_all_nodes() -> void:
 func _sync_focus_building() -> void:
 	if focus_organ_building != 0:
 		sector.set_tower_collapsed(int(building_state.get(focus_organ_building, 0)) == 2)
+	var non_organ_collapsed := 0
+	for b in snap.get("buildings", []) as Array:
+		var bid := int(b["id"])
+		if int(b["district_id"]) == focus and not bool(b["houses_city_organ"]):
+			if int(building_state.get(bid, 0)) == 2:
+				non_organ_collapsed += 1
+	sector.set_surrounding_blocks_collapsed(non_organ_collapsed * 3)
 
 
 func _hide_kowloon_props() -> void:
@@ -278,11 +285,11 @@ func _objectives_text() -> String:
 
 
 func _set_sector_labels() -> void:
+	if focus >= 1 and focus <= 6:
+		sector.set_focus_district(focus)
 	sector.focus_district_name = focus_name
 	sector.focus_organ_name = _organ_name(focus_organ)
-	# Only the Kowloon Bio-Foundry has finished landmark art so far; other
-	# districts render it as a clearly-labelled placeholder until Step 2.
-	sector.focus_organ_placeholder = focus_organ != 3
+	sector.focus_organ_placeholder = false
 	sector.replay_objectives_text = _objectives_text()
 	sector._refresh_hud()
 

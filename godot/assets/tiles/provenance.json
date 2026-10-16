@@ -1,0 +1,237 @@
+{
+  "schema_version": "1.0",
+  "project": "wetware",
+  "pipeline": "venice-z-image-turbo-plus-local-bg-remove-plus-sobel-2.5d",
+  "license": "Proprietary / First-Party Generated (Venice Uncensored Creative Pipeline)",
+  "assets": [
+    {
+      "id": "biofoundry_tower",
+      "district_id": 1,
+      "district_name": "Kowloon Bio-Foundry Sector",
+      "organ": "BioFoundry",
+      "outputs": [
+        "biofoundry_tower_intact_albedo.png",
+        "biofoundry_tower_intact_emissive.png",
+        "../normals/biofoundry_tower_intact_normal.png",
+        "biofoundry_tower_rubble_albedo.png",
+        "biofoundry_tower_rubble_emissive.png",
+        "../normals/biofoundry_tower_rubble_normal.png"
+      ],
+      "dimensions": "256x288 (2:1 isometric 32-bit pixel art + Sobel 2.5D normal + emissive)"
+    },
+    {
+      "id": "broadcast_spire",
+      "district_id": 2,
+      "district_name": "Shinjuku Broadcast Spire",
+      "organ": "NeuralBroadcastSpire",
+      "intact_generation": {
+        "embed_exif_metadata": false,
+        "format": "png",
+        "height": 1024,
+        "hide_watermark": true,
+        "model": "z-image-turbo",
+        "prompt": "2:1 isometric 32-bit cyberpunk neural broadcast spire tower megastructure, glowing cyan and magenta satellite dish arrays, holographic transmitter antennae, dark brutalist steel architecture, isolated on solid dark background, Syndicate Wars pixel art style",
+        "return_binary": false,
+        "safe_mode": false,
+        "seed": -404156250,
+        "steps": 8,
+        "width": 1024
+      },
+      "rubble_generation": {
+        "embed_exif_metadata": false,
+        "format": "png",
+        "height": 1024,
+        "hide_watermark": true,
+        "model": "z-image-turbo",
+        "prompt": "collapsed ruined neural broadcast spire tower, snapped antenna mast lying across rubble, shattered satellite dishes, smoking craters, sparking cyan cables, burning debris, 2:1 isometric 32-bit pixel art, Syndicate Wars style, dark brutalist cyberpunk megastructure, single building centered, isolated on solid flat dark background",
+        "return_binary": false,
+        "safe_mode": false,
+        "seed": -713534000,
+        "steps": 8,
+        "width": 1024
+      },
+      "outputs": [
+        "broadcast_spire_intact_albedo.png",
+        "broadcast_spire_intact_emissive.png",
+        "../normals/broadcast_spire_intact_normal.png",
+        "broadcast_spire_rubble_albedo.png",
+        "broadcast_spire_rubble_emissive.png",
+        "../normals/broadcast_spire_rubble_normal.png"
+      ],
+      "dimensions": "256x288 (2:1 isometric 32-bit pixel art + Sobel 2.5D normal + emissive)"
+    },
+    {
+      "id": "monorail_hub",
+      "district_id": 3,
+      "district_name": "Chiba Monorail Transit Hub",
+      "organ": "MonorailTransitHub",
+      "intact_generation": {
+        "embed_exif_metadata": false,
+        "format": "png",
+        "height": 1024,
+        "hide_watermark": true,
+        "model": "z-image-turbo",
+        "prompt": "elevated maglev monorail transit hub terminal, violet and cyan neon gantries, armored vault car docked on elevated rail, steel support pylons, 2:1 isometric 32-bit pixel art, Syndicate Wars style, dark brutalist cyberpunk megastructure, single building centered, isolated on solid flat dark background",
+        "return_binary": false,
+        "safe_mode": false,
+        "seed": -755099104,
+        "steps": 8,
+        "width": 1024
+      },
+      "rubble_generation": {
+        "embed_exif_metadata": false,
+        "format": "png",
+        "height": 1024,
+        "hide_watermark": true,
+        "model": "z-image-turbo",
+        "prompt": "destroyed maglev monorail transit hub, derailed armored vault car crashed into rubble, collapsed elevated rail, broken pylons, fires and smoke, 2:1 isometric 32-bit pixel art, Syndicate Wars style, dark brutalist cyberpunk megastructure, single building centered, isolated on solid flat dark background",
+        "return_binary": false,
+        "safe_mode": false,
+        "seed": 195002875,
+        "steps": 8,
+        "width": 1024
+      },
+      "outputs": [
+        "monorail_hub_intact_albedo.png",
+        "monorail_hub_intact_emissive.png",
+        "../normals/monorail_hub_intact_normal.png",
+        "monorail_hub_rubble_albedo.png",
+        "monorail_hub_rubble_emissive.png",
+        "../normals/monorail_hub_rubble_normal.png"
+      ],
+      "dimensions": "256x288 (2:1 isometric 32-bit pixel art + Sobel 2.5D normal + emissive)"
+    },
+    {
+      "id": "ordinance_foundry",
+      "district_id": 4,
+      "district_name": "Neo-Ruhr Heavy Ordinance Foundry",
+      "organ": "HeavyOrdinanceFoundry",
+      "intact_generation": {
+        "embed_exif_metadata": false,
+        "format": "png",
+        "height": 1024,
+        "hide_watermark": true,
+        "model": "z-image-turbo",
+        "prompt": "heavy military ordinance foundry forge, glowing molten orange blast furnaces, railgun assembly gantry cranes, tall smokestacks, armored steel walls, 2:1 isometric 32-bit pixel art, Syndicate Wars style, dark brutalist cyberpunk megastructure, single building centered, isolated on solid flat dark background",
+        "return_binary": false,
+        "safe_mode": false,
+        "seed": 327972439,
+        "steps": 8,
+        "width": 1024
+      },
+      "rubble_generation": {
+        "embed_exif_metadata": false,
+        "format": "png",
+        "height": 1024,
+        "hide_watermark": true,
+        "model": "z-image-turbo",
+        "prompt": "destroyed heavy ordinance foundry, collapsed smokestacks, spilled glowing molten slag pools, twisted crane wreckage, burning rubble crater, 2:1 isometric 32-bit pixel art, Syndicate Wars style, dark brutalist cyberpunk megastructure, single building centered, isolated on solid flat dark background",
+        "return_binary": false,
+        "safe_mode": false,
+        "seed": 2468811,
+        "steps": 8,
+        "width": 1024
+      },
+      "outputs": [
+        "ordinance_foundry_intact_albedo.png",
+        "ordinance_foundry_intact_emissive.png",
+        "../normals/ordinance_foundry_intact_normal.png",
+        "ordinance_foundry_rubble_albedo.png",
+        "ordinance_foundry_rubble_emissive.png",
+        "../normals/ordinance_foundry_rubble_normal.png"
+      ],
+      "dimensions": "256x288 (2:1 isometric 32-bit pixel art + Sobel 2.5D normal + emissive)"
+    },
+    {
+      "id": "power_subgrid",
+      "district_id": 5,
+      "district_name": "Mid-Levels Power Sub-Grid",
+      "organ": "PowerSubGrid",
+      "intact_generation": {
+        "embed_exif_metadata": false,
+        "format": "png",
+        "height": 1024,
+        "hide_watermark": true,
+        "model": "z-image-turbo",
+        "prompt": "high voltage plasma power substation, arcing electric blue tesla transformer coils, cooling towers, glowing plasma conduits, fenced compound, 2:1 isometric 32-bit pixel art, Syndicate Wars style, dark brutalist cyberpunk megastructure, single building centered, isolated on solid flat dark background",
+        "return_binary": false,
+        "safe_mode": false,
+        "seed": -240314965,
+        "steps": 8,
+        "width": 1024
+      },
+      "rubble_generation": {
+        "embed_exif_metadata": false,
+        "format": "png",
+        "height": 1024,
+        "hide_watermark": true,
+        "model": "z-image-turbo",
+        "prompt": "destroyed plasma power substation, toppled cooling towers, exploded transformer coils sparking blue arcs, scorched rubble, dark blackout, 2:1 isometric 32-bit pixel art, Syndicate Wars style, dark brutalist cyberpunk megastructure, single building centered, isolated on solid flat dark background",
+        "return_binary": false,
+        "safe_mode": false,
+        "seed": 33907096,
+        "steps": 8,
+        "width": 1024
+      },
+      "outputs": [
+        "power_subgrid_intact_albedo.png",
+        "power_subgrid_intact_emissive.png",
+        "../normals/power_subgrid_intact_normal.png",
+        "power_subgrid_rubble_albedo.png",
+        "power_subgrid_rubble_emissive.png",
+        "../normals/power_subgrid_rubble_normal.png"
+      ],
+      "dimensions": "256x288 (2:1 isometric 32-bit pixel art + Sobel 2.5D normal + emissive)"
+    },
+    {
+      "id": "clearinghouse",
+      "district_id": 6,
+      "district_name": "Zaibatsu Clearinghouse Arcology",
+      "organ": "CorporateClearinghouse",
+      "intact_generation": {
+        "embed_exif_metadata": false,
+        "format": "png",
+        "height": 1024,
+        "hide_watermark": true,
+        "model": "z-image-turbo",
+        "prompt": "corporate financial clearinghouse arcology pyramid tower, gold and crimson holographic stock ticker facade, armored data vault core, obsidian steel, 2:1 isometric 32-bit pixel art, Syndicate Wars style, dark brutalist cyberpunk megastructure, single building centered, isolated on solid flat dark background",
+        "return_binary": false,
+        "safe_mode": false,
+        "seed": 752085427,
+        "steps": 8,
+        "width": 1024
+      },
+      "rubble_generation": {
+        "embed_exif_metadata": false,
+        "format": "png",
+        "height": 1024,
+        "hide_watermark": true,
+        "model": "z-image-turbo",
+        "prompt": "collapsed corporate clearinghouse arcology pyramid, shattered gold glass facade, exposed burning data vault core, scattered holographic debris, rubble, 2:1 isometric 32-bit pixel art, Syndicate Wars style, dark brutalist cyberpunk megastructure, single building centered, isolated on solid flat dark background",
+        "return_binary": false,
+        "safe_mode": false,
+        "seed": 480689289,
+        "steps": 8,
+        "width": 1024
+      },
+      "outputs": [
+        "clearinghouse_intact_albedo.png",
+        "clearinghouse_intact_emissive.png",
+        "../normals/clearinghouse_intact_normal.png",
+        "clearinghouse_rubble_albedo.png",
+        "clearinghouse_rubble_emissive.png",
+        "../normals/clearinghouse_rubble_normal.png"
+      ],
+      "dimensions": "256x288 (2:1 isometric 32-bit pixel art + Sobel 2.5D normal + emissive)"
+    },
+    {
+      "id": "city_block_rubble",
+      "outputs": [
+        "city_block_rubble_albedo.png",
+        "city_block_rubble_emissive.png",
+        "../normals/city_block_rubble_normal.png"
+      ],
+      "dimensions": "256x256 (2:1 isometric collapsed building foundation + Sobel 2.5D normal + emissive)"
+    }
+  ]
+}
