@@ -137,9 +137,19 @@ var _cam_target_zoom: float = 1.0
 # M7 Multi-Pose Animation, Procedural Crowd & Dense City Cutaway State
 var _actor_prev_pos: Dictionary = {}
 var _actor_walk_phase: Dictionary = {}
+const DISTRICT_LANDMARKS := {
+	1: {"name": "KOWLOON BIO-FOUNDRY SECTOR", "organ": "BIO-FOUNDRY", "stem": "biofoundry_tower"},
+	2: {"name": "SHINJUKU BROADCAST SPIRE", "organ": "BROADCAST SPIRE", "stem": "broadcast_spire"},
+	3: {"name": "CHIBA MONORAIL & SUB-GRID", "organ": "MONORAIL HUB", "stem": "monorail_hub"},
+	4: {"name": "NEO-RUHR ORDINANCE FOUNDRY", "organ": "ORDINANCE FOUNDRY", "stem": "ordinance_foundry"},
+	5: {"name": "MID-LEVELS POWER SUB-GRID", "organ": "POWER SUB-GRID", "stem": "power_subgrid"},
+	6: {"name": "ZAIBATSU CLEARINGHOUSE ARCOLOGY", "organ": "CLEARINGHOUSE", "stem": "clearinghouse"},
+}
+
 var _actor_fire_timer: Dictionary = {}
 var _actor_facing_sector: Dictionary = {}
 var _city_buildings: Array[Sprite2D] = []
+var _city_building_is_tenement: Array[bool] = []
 var _building_alpha: Dictionary = {}
 var _occluded_actor_ids: Dictionary = {}
 var _proc_civilians: Array[Dictionary] = []
@@ -149,11 +159,18 @@ var _m7_initialized: bool = false
 # authoritative C++ snapshot (see sim_replay.gd); nothing here is staged.
 var _rival_operatives: Array[Dictionary] = []
 var _replay: Node = null
-# Focus district labels (overridden by snapshot replay for other districts).
+var _hq_screens: Node = null
+var focus_district_id: int = 1
 var focus_district_name: String = "KOWLOON BIO-FOUNDRY SECTOR"
 var focus_organ_name: String = "BIO-FOUNDRY"
 var focus_organ_placeholder: bool = false
 var replay_objectives_text: String = ""
+var operative_organs_live: Array[String] = [
+	"V3 EYES | V3 BRAIN | V2 LEGS",
+	"V3 ARMS | V3 CHEST | V2 HEART",
+	"V4 BRAIN | V3 EYES | V2 CHEST",
+	"V4 CHEST | V3 LEGS | V3 ARMS",
+]
 
 func _load_tex(res_path: String) -> Texture2D:
 	var abs_path := ProjectSettings.globalize_path(res_path)
@@ -172,6 +189,14 @@ func _ensure_m7_initialized() -> void:
 	_rebuild_meat_puppet_roster()
 	_configure_multi_pose_actors()
 	_populate_sector_grid()
+	var hq_script := load("res://scenes/hq_screens.gd") as GDScript
+	if hq_script != null:
+		_hq_screens = hq_script.new()
+		_hq_screens.name = "HqScreens"
+		add_child(_hq_screens)
+		_hq_screens.setup(self)
+
+var _trailer_director: Node = null
 
 func _ready() -> void:
 	_ensure_m7_initialized()
@@ -183,10 +208,28 @@ func _ready() -> void:
 	_update_operative_card()
 	_refresh_hud()
 	var uargs := OS.get_cmdline_user_args()
+	var trailer_act := 0
+	var hq_screen_arg := 0
+	var snap_dir := "/tmp/wetware-m9-snaps"
 	for idx in range(uargs.size()):
 		if uargs[idx] == "--snapshot" and idx + 1 < uargs.size():
 			start_snapshot_replay(uargs[idx + 1])
-	if "--demo-reel" in uargs:
+		elif uargs[idx] == "--trailer-act" and idx + 1 < uargs.size():
+			trailer_act = int(uargs[idx + 1])
+		elif uargs[idx] == "--hq-screen" and idx + 1 < uargs.size():
+			hq_screen_arg = int(uargs[idx + 1])
+		elif uargs[idx] == "--snap-dir" and idx + 1 < uargs.size():
+			snap_dir = uargs[idx + 1]
+	if hq_screen_arg >= 1 and hq_screen_arg <= 3:
+		set_hq_screen(hq_screen_arg)
+	elif trailer_act >= 1 and trailer_act <= 6:
+		var td_script := load("res://scenes/trailer_director.gd") as GDScript
+		if td_script != null:
+			_trailer_director = td_script.new()
+			_trailer_director.name = "TrailerDirector"
+			add_child(_trailer_director)
+			_trailer_director.begin(self, trailer_act, snap_dir)
+	elif "--demo-reel" in uargs:
 		demo_reel_active = true
 		_select_operative(1)
 	if DisplayServer.get_name() == "headless":
@@ -440,6 +483,7 @@ func _populate_sector_grid() -> void:
 
 func _populate_surrounding_city_blocks(floor_root: Node2D) -> void:
 	var tower_tpl := get_node_or_null("BioFoundryTowerIntact") as Sprite2D
+	var rubble_tpl := get_node_or_null("BioFoundryTowerRubble") as Sprite2D
 	var hauler_tpl := get_node_or_null("AutonomousCargoHauler") as Sprite2D
 	var dozer_tpl := get_node_or_null("HeavyRiotBulldozer") as Sprite2D
 	var decon_tpl := get_node_or_null("HazmatDeconRig") as Sprite2D
@@ -453,7 +497,10 @@ func _populate_surrounding_city_blocks(floor_root: Node2D) -> void:
 
 	if tower_tpl.material is ShaderMaterial:
 		tower_tpl.material = (tower_tpl.material as ShaderMaterial).duplicate()
+	if rubble_tpl != null and rubble_tpl.material is ShaderMaterial:
+		rubble_tpl.material = (rubble_tpl.material as ShaderMaterial).duplicate()
 	_city_buildings.append(tower_tpl)
+	_city_building_is_tenement.append(false)
 	_building_alpha[tower_tpl.get_instance_id()] = 1.0
 
 	var ten_alb := _load_tex("res://assets/tiles/city_block_tenement_albedo.png")
@@ -502,6 +549,7 @@ func _populate_surrounding_city_blocks(floor_root: Node2D) -> void:
 		b_node.set_meta("stratum", 1)
 		add_child(b_node)
 		_city_buildings.append(b_node)
+		_city_building_is_tenement.append(is_tenement)
 		_building_alpha[b_node.get_instance_id()] = 1.0
 
 	# Perimeter vehicles & infrastructure across the outer avenues
@@ -665,7 +713,7 @@ func _process(delta: float) -> void:
 	var needs_redraw := false
 	var real_dt: float = delta / maxf(Engine.time_scale, 0.05)
 
-	if demo_reel_active and _replay == null:
+	if demo_reel_active and _replay == null and _trailer_director == null:
 		demo_frame += 1
 		_step_demo_reel(demo_frame)
 		needs_redraw = true
@@ -1321,6 +1369,27 @@ func _draw_sector_minimap(font: Font) -> void:
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed:
 		match event.keycode:
+			KEY_F1:
+				set_focus_district(1)
+				return
+			KEY_F2:
+				set_focus_district(2)
+				return
+			KEY_F3:
+				set_focus_district(3)
+				return
+			KEY_F4:
+				set_focus_district(4)
+				return
+			KEY_F5:
+				set_focus_district(5)
+				return
+			KEY_F6:
+				set_focus_district(6)
+				return
+		if _hq_screens != null and _hq_screens.handle_key_input(event.keycode):
+			return
+		match event.keycode:
 			KEY_1:
 				_apply_stratum_cutaway(Stratum.UNDER_GRID)
 			KEY_2:
@@ -1400,6 +1469,8 @@ func _select_operative(index: int) -> void:
 	if op_node != null and op_node.has_meta("stratum"):
 		_apply_stratum_cutaway(int(op_node.get_meta("stratum")) as Stratum)
 	_update_operative_card()
+	if _hq_screens != null:
+		_hq_screens.queue_redraw()
 	_request_overlay_redraw()
 
 func _get_selected_operative_node() -> Sprite2D:
@@ -1520,6 +1591,78 @@ func _set_global_blackout(factor: float) -> void:
 		if child is CanvasItem and child.material is ShaderMaterial:
 			(child.material as ShaderMaterial).set_shader_parameter("blackout_factor", factor)
 
+func set_focus_district(district_id: int) -> void:
+	_ensure_m7_initialized()
+	var did := clampi(district_id, 1, 6)
+	focus_district_id = did
+	var info: Dictionary = DISTRICT_LANDMARKS.get(did, DISTRICT_LANDMARKS[1])
+	focus_district_name = String(info["name"])
+	focus_organ_name = String(info["organ"])
+	focus_organ_placeholder = false
+	var stem: String = String(info["stem"])
+
+	var intact_node := get_node_or_null("BioFoundryTowerIntact") as Sprite2D
+	if intact_node != null:
+		intact_node.texture = _load_tex("res://assets/tiles/%s_intact_albedo.png" % stem)
+		if intact_node.material is ShaderMaterial:
+			var smat := intact_node.material as ShaderMaterial
+			smat.set_shader_parameter("emissive_mask", _load_tex("res://assets/tiles/%s_intact_emissive.png" % stem))
+			smat.set_shader_parameter("normal_map", _load_tex("res://assets/normals/%s_intact_normal.png" % stem))
+
+	var rubble_node := get_node_or_null("BioFoundryTowerRubble") as Sprite2D
+	if rubble_node != null:
+		rubble_node.texture = _load_tex("res://assets/tiles/%s_rubble_albedo.png" % stem)
+		if rubble_node.material is ShaderMaterial:
+			var rmat := rubble_node.material as ShaderMaterial
+			rmat.set_shader_parameter("emissive_mask", _load_tex("res://assets/tiles/%s_rubble_emissive.png" % stem))
+			rmat.set_shader_parameter("normal_map", _load_tex("res://assets/normals/%s_rubble_normal.png" % stem))
+
+	if _hq_screens != null:
+		_hq_screens.queue_redraw()
+	_refresh_hud()
+
+func set_surrounding_blocks_collapsed(collapsed_count: int) -> void:
+	_ensure_m7_initialized()
+	var rub_alb := _load_tex("res://assets/tiles/city_block_rubble_albedo.png")
+	var rub_emi := _load_tex("res://assets/tiles/city_block_rubble_emissive.png")
+	var rub_nrm := _load_tex("res://assets/normals/city_block_rubble_normal.png")
+	var ten_alb := _load_tex("res://assets/tiles/city_block_tenement_albedo.png")
+	var ten_emi := _load_tex("res://assets/tiles/city_block_tenement_emissive.png")
+	var ten_nrm := _load_tex("res://assets/normals/city_block_tenement_normal.png")
+	var corp_alb := _load_tex("res://assets/tiles/city_block_corp_albedo.png")
+	var corp_emi := _load_tex("res://assets/tiles/city_block_corp_emissive.png")
+	var corp_nrm := _load_tex("res://assets/normals/city_block_corp_normal.png")
+
+	for idx in range(1, _city_buildings.size()):
+		var b_node := _city_buildings[idx]
+		if b_node == null:
+			continue
+		var is_collapsed := (idx <= collapsed_count)
+		var is_ten := _city_building_is_tenement[idx] if idx < _city_building_is_tenement.size() else false
+		if is_collapsed:
+			b_node.texture = rub_alb
+			if b_node.material is ShaderMaterial:
+				var bmat := b_node.material as ShaderMaterial
+				bmat.set_shader_parameter("emissive_mask", rub_emi)
+				bmat.set_shader_parameter("normal_map", rub_nrm)
+		else:
+			b_node.texture = ten_alb if is_ten else corp_alb
+			if b_node.material is ShaderMaterial:
+				var bmat := b_node.material as ShaderMaterial
+				bmat.set_shader_parameter("emissive_mask", ten_emi if is_ten else corp_emi)
+				bmat.set_shader_parameter("normal_map", ten_nrm if is_ten else corp_nrm)
+	_request_overlay_redraw()
+
+func set_hq_screen(mode: int) -> void:
+	_ensure_m7_initialized()
+	if _hq_screens != null:
+		_hq_screens.set_mode(mode)
+
+func get_hq_screen() -> int:
+	if _hq_screens != null:
+		return int(_hq_screens.active_mode)
+	return 0
+
 func valid_snapshot(data: Variant) -> bool:
 	if typeof(data) != TYPE_DICTIONARY:
 		return false
@@ -1568,22 +1711,37 @@ func apply_snapshot(data: Dictionary) -> bool:
 	overclock_active = t_scale < 0.5
 	Engine.time_scale = t_scale
 
+	var snap_focus := int(data.get("focus_district_id", focus_district_id))
+	if snap_focus >= 1 and snap_focus <= 6:
+		set_focus_district(snap_focus)
+
+	var non_organ_collapsed := 0
 	for bld_var in data["buildings"] as Array:
 		var bld: Dictionary = bld_var
-		if int(bld["id"]) == 10:
+		var b_did := int(bld.get("district_id", 1))
+		var is_organ := bool(bld.get("houses_city_organ", int(bld["id"]) == 10))
+		if b_did == focus_district_id and is_organ:
 			set_tower_collapsed(int(bld["state"]) == 2)
+		elif b_did == focus_district_id and int(bld["state"]) == 2:
+			non_organ_collapsed += 1
+	set_surrounding_blocks_collapsed(non_organ_collapsed * 3)
 
 	var districts: Variant = data.get("districts")
 	if typeof(districts) == TYPE_ARRAY and not (districts as Array).is_empty():
-		var d0: Dictionary = (districts as Array)[0]
-		transformer_sabotaged = not bool(d0.get("transformer_intact", true)) or bool(d0.get("power_blackout", false))
-		convoy_intercepted = not bool(d0.get("executive_convoy_active", true))
-		crowd_surge_active = bool(d0.get("crowd_surge_active", false))
+		var d_focus: Dictionary = (districts as Array)[0]
+		for d_var in districts as Array:
+			var d_entry: Dictionary = d_var
+			if int(d_entry.get("id", 0)) == focus_district_id:
+				d_focus = d_entry
+				break
+		transformer_sabotaged = not bool(d_focus.get("transformer_intact", true)) or bool(d_focus.get("power_blackout", false))
+		convoy_intercepted = not bool(d_focus.get("executive_convoy_active", true))
+		crowd_surge_active = bool(d_focus.get("crowd_surge_active", false))
 		_set_global_blackout(0.52 if transformer_sabotaged else 1.0)
 
 	var player_syn: Dictionary = (data["syndicates"] as Array)[0]
 	syndicate_treasury = int(player_syn.get("treasury", 0))
-	salvage_units = int(player_syn.get("salvage_count", salvage_units))
+	salvage_units = int(player_syn.get("salvage_units", player_syn.get("salvage_count", salvage_units)))
 	thrall_count = int(player_syn.get("thralls_count", thrall_count))
 	var squad: Array = player_syn["squad"]
 	for i in range(min(squad.size(), OPERATIVE_NODES.size())):
@@ -1593,6 +1751,9 @@ func apply_snapshot(data: Dictionary) -> bool:
 			var s := int(op["stratum"])
 			node.set_meta("stratum", s)
 			node.visible = bool(op["alive"])
+
+	if _hq_screens != null:
+		_hq_screens.sync_from_snapshot(data)
 
 	_apply_stratum_cutaway(active_stratum)
 	_update_operative_card()
@@ -1607,6 +1768,8 @@ func set_tower_collapsed(collapsed: bool) -> void:
 		intact_node.visible = not collapsed
 	if rubble_node:
 		rubble_node.visible = collapsed
+	if _hq_screens != null:
+		_hq_screens.queue_redraw()
 	_refresh_hud()
 
 func _apply_stratum_cutaway(focus_stratum: Stratum) -> void:
@@ -1650,13 +1813,14 @@ func _update_operative_card() -> void:
 	}
 	var bpm_val: int = 164 if overclock_active else (92 + selected_operative * 6)
 	var ipa_text := "95/92/98% [SURGE]" if overclock_active else "82/78/65%"
+	var org_str: String = operative_organs_live[selected_operative] if selected_operative < operative_organs_live.size() else OPERATIVE_ORGANS[selected_operative]
 	bio_label.text = "%s [%s]\n%s | LINK: %s | %d BPM\nORGANS: %s\nI/P/A: %s | WPN: %s | THRALLS: %d" % [
 		ident["unit_code"],
 		s_name,
 		ident["subj_line"],
 		ident["link_str"],
 		bpm_val,
-		OPERATIVE_ORGANS[selected_operative],
+		org_str,
 		ipa_text,
 		WEAPON_NAMES[active_weapon_index],
 		thrall_count,
@@ -1684,14 +1848,13 @@ func _refresh_hud() -> void:
 		obj_label.text = replay_objectives_text
 	elif obj_label != null:
 		obj_label.text = (
-			"KOWLOON SECTOR OBJECTIVES:\n"
-			+ "[%s] SHEAR BIO-FOUNDRY PILLARS (C / RMB FIRE)\n" % ("X" if tower_collapsed else " ")
+			"%s OBJECTIVES:\n" % focus_district_name
+			+ "[%s] SHEAR %s PILLARS (C / RMB FIRE)\n" % ["X" if tower_collapsed else " ", focus_organ_name]
 			+ "[%s] SABOTAGE SUB-GRID TRANSFORMER (T)\n" % ("X" if transformer_sabotaged else " ")
-			+ "[%s] AMBUSH ZAIBATSU LIMO CONVOY (V)\n" % ("X" if convoy_intercepted else " ")
-			+ "[%s] LOOT DERAILED MONORAIL VAULT (M)\n" % ("X" if monorail_looted else " ")
+			+ "[%s] AMBUSH ZAIBATSU LIMO CONVOY (V) | MONORAIL (M)\n" % ("X" if (convoy_intercepted or monorail_looted) else " ")
 			+ "[%s] PERSUADERTRON CROWD SURGE (P) | CRYO-CYCLE (N)\n" % ("X" if crowd_surge_active else " ")
-			+ "KBM: LMB/WASD Move | Arrows Pan | Wheel/Z Zoom | RMB Fire | Tab Op | 1-3 Stratum\n"
-			+ "STEAM PAD: L-Stick Move | R-Stick Pan | X Fire | Y Persuade | LB/RB Op | D-Pad"
+			+ "HQ SCREENS: [G] Megacity Map | [U] Ripperdoc Surgery | [K] R&D & Salvage Lab\n"
+			+ "DISTRICTS: [F1-F6] Switch Sector | [1-3] Stratum | [Tab] Op | [Space] Overclock"
 		)
 	_update_operative_card()
 	_request_overlay_redraw()
