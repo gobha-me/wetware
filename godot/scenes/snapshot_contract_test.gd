@@ -197,6 +197,65 @@ func _initialize() -> void:
 		quit(1)
 		return
 
+	# Verify M12: Live C++23 command script dispatch and deterministic digest rolling
+	var prev_digest: String = sector.last_digest
+	if not sector.dispatch_live_cpp_command("raid:2:0;step_day:1", true):
+		push_error("M12 dispatch_live_cpp_command failed")
+		quit(1)
+		return
+	if sector.last_digest == prev_digest or sector._live_cpp_command_log.is_empty():
+		push_error("M12 live command log / digest did not advance")
+		quit(1)
+		return
+
+	# Verify M13: Playable 6-District Megacity Campaign Loop & Rival Counter-Raids
+	sector.syndicate_treasury = 5000
+	if not sector._hq_screens.raid_district(2, true):
+		push_error("M13 raid_district failed")
+		quit(1)
+		return
+	if not sector._hq_screens.advance_campaign_day():
+		push_error("M13 advance_campaign_day failed")
+		quit(1)
+		return
+	if sector._hq_screens.campaign_day < 2:
+		push_error("M13 campaign_day did not advance")
+		quit(1)
+		return
+	if not sector._hq_screens.rebuild_district_landmark(2):
+		push_error("M13 rebuild_district_landmark failed")
+		quit(1)
+		return
+	sector.set_focus_district(1)
+
+	# Verify M14: Spatial Audio synthesis & Multi-Stage Building Structural Damage (INTACT -> DAMAGED -> RUBBLE)
+	if sector._ambient_player == null or sector._sfx_player_2d == null:
+		push_error("M14 spatial audio players not initialized")
+		quit(1)
+		return
+	var prev_sfx_count: int = sector.sfx_play_count
+	sector.play_sfx("gauss", Vector2(640, 292))
+	if sector.sfx_play_count != prev_sfx_count + 1 or sector.last_played_sfx != "gauss":
+		push_error("M14 play_sfx('gauss') did not register")
+		quit(1)
+		return
+	sector.set_tower_collapsed(false)
+	if sector.tower_damage_stage != 0 or sector.tower_structural_hp != 100:
+		push_error("M14 tower failed to reset to stage 0 (INTACT, 100 HP)")
+		quit(1)
+		return
+	sector.apply_tower_damage(50)
+	if sector.tower_damage_stage != 1 or sector.tower_collapsed:
+		push_error("M14 first 50-damage hit should put tower in stage 1 (DAMAGED), got %d" % sector.tower_damage_stage)
+		quit(1)
+		return
+	sector.apply_tower_damage(50)
+	if sector.tower_damage_stage != 2 or not sector.tower_collapsed:
+		push_error("M14 second 50-damage hit should collapse tower to stage 2 (RUBBLE), got %d" % sector.tower_damage_stage)
+		quit(1)
+		return
+	sector.set_tower_collapsed(false)
+
 	# Reject malformed / adversarial snapshots
 	var bad_cases: Array = [
 		null,

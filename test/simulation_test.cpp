@@ -580,6 +580,25 @@ void test_combat_is_scoped_to_districts() {
           "Cannot fire into a district the shooter is not in");
 }
 
+void test_live_command_script_execution() {
+  auto sim_a = wetware::create_default_vertical_slice();
+  auto sim_b = wetware::create_default_vertical_slice();
+
+  constexpr std::string_view kScript =
+      "focus:2;organ:0:0:3;research:1:350;convoy:1;sabotage:1;raid:2:0;"
+      "step_day:1";
+  const auto focus_a = wetware::run_command_script(kScript, sim_a);
+  const auto focus_b = wetware::run_command_script(kScript, sim_b);
+  require(focus_a.has_value() && focus_b == focus_a && *focus_a == 2,
+          "Command script sets focus district to 2");
+  require(sim_a.state_digest() == sim_b.state_digest(),
+          "Identical command scripts produce identical state_digest");
+  require(sim_a.find_district(2)->owner_syndicate == 1,
+          "Raid command captures District 2 for EuroCorp");
+  require(!wetware::run_command_script("unknown_opcode:1", sim_a).has_value(),
+          "Malformed command opcode returns std::nullopt");
+}
+
 } // namespace
 
 int main() {
@@ -597,6 +616,7 @@ int main() {
   test_strategy_b_scorched_earth_ordinance_fallout();
   test_strategy_c_three_syndicate_three_stratum_convergence();
   test_combat_is_scoped_to_districts();
+  test_live_command_script_execution();
   std::cout << "All wetware C++23 simulation tests passed.\n";
   return 0;
 }

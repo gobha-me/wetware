@@ -54,6 +54,8 @@ var sector = null
 var active_mode: int = ScreenMode.NONE
 var selected_organ_slot: int = 0
 var selected_blueprint_idx: int = 0
+var campaign_day: int = 1
+var last_rival_raid_summary: String = "NO RIVAL COUNTER-RAIDS DETECTED"
 var status_toast: String = "HQ LINK ONLINE // SELECT DISTRICT, IMPLANT SLOT, OR R&D BLUEPRINT"
 
 var layer: CanvasLayer = null
@@ -249,6 +251,18 @@ func _init_default_state() -> void:
 	]
 
 
+func _recompute_daily_nets() -> void:
+	for s in syndicates_state:
+		var sid := int(s["id"])
+		var net := 0
+		for d in districts_state:
+			if int(d["owner"]) == sid and not bool(d["rubble"]):
+				net += int(d["revenue"])
+		if has_organ_discount(6) and sid == 1:
+			net = int(round(float(net) * 1.40))
+		s["daily_net"] = net
+
+
 func sync_from_snapshot(data: Dictionary) -> void:
 	if data.has("syndicates") and typeof(data["syndicates"]) == TYPE_ARRAY:
 		var syns: Array = data["syndicates"]
@@ -316,6 +330,108 @@ func effective_cost(base_cost: int, organ_district_id: int) -> int:
 	return base_cost
 
 
+func raid_district(did: int, scorched: bool = false) -> bool:
+	var target_idx := clampi(did - 1, 0, districts_state.size() - 1)
+	var d: Dictionary = districts_state[target_idx]
+	var prev_owner := int(d["owner"])
+	d["owner"] = 1
+	if scorched:
+		d["rubble"] = true
+	sector.set_focus_district(int(d["id"]))
+	if scorched:
+		sector.set_tower_collapsed(true)
+	sector.syndicate_treasury += 800
+	sector.salvage_units += 1
+	syndicates_state[0]["treasury"] = sector.syndicate_treasury
+	_recompute_daily_nets()
+	sector.dispatch_live_cpp_command("raid:%d:%d" % [int(d["id"]), 1 if scorched else 0])
+	status_toast = "CAPTURED %s FROM %s (+800 CR, +1 SALVAGE%s)" % [
+		d["short"],
+		SYN_SHORT.get(prev_owner, "RIVAL"),
+		" // SCORCHED RUBBLE" if scorched else " // ORGAN INTACT",
+	]
+	sector._refresh_hud()
+	queue_redraw()
+	return true
+
+
+func rebuild_district_landmark(did: int) -> bool:
+	var target_idx := clampi(did - 1, 0, districts_state.size() - 1)
+	var d: Dictionary = districts_state[target_idx]
+	var is_rub := bool(d["rubble"]) or (int(d["id"]) == int(sector.focus_district_id) and bool(sector.tower_collapsed))
+	if not is_rub:
+		status_toast = "%s LANDMARK ALREADY INTACT" % d["short"]
+		queue_redraw()
+		return false
+	var cost := 1200
+	if sector.syndicate_treasury < cost:
+		status_toast = "INSUFFICIENT CREDITS FOR LANDMARK RECONSTRUCTION (%d CR REQUIRED)" % cost
+		queue_redraw()
+		return false
+	sector.syndicate_treasury -= cost
+	syndicates_state[0]["treasury"] = sector.syndicate_treasury
+	d["rubble"] = false
+	if int(d["id"]) == int(sector.focus_district_id):
+		sector.set_tower_collapsed(false)
+	_recompute_daily_nets()
+	sector.dispatch_live_cpp_command("rebuild:%d" % (int(d["id"]) * 10))
+	status_toast = "RECONSTRUCTED %s IN %s (-%d CR // CITY ORGAN RESTORED)" % [
+		d["organ_name"], d["short"], cost
+	]
+	sector._refresh_hud()
+	queue_redraw()
+	return true
+
+
+func advance_campaign_day() -> bool:
+	campaign_day += 1
+	_recompute_daily_nets()
+	for s in syndicates_state:
+		var sid := int(s["id"])
+		var net := int(s["daily_net"])
+		if sid == 1:
+			sector.syndicate_treasury += net
+			s["treasury"] = sector.syndicate_treasury
+		else:
+			s["treasury"] = int(s["treasury"]) + net
+
+	# Step active R&D queues
+	for bp in blueprints_state:
+		if not bool(bp["unlocked"]):
+			var req := effective_cost(int(bp["base_cost"]), int(bp["organ_kind"]))
+			var step_b := mini(int(bp["daily_budget"]), maxi(0, req - int(bp["invested"])))
+			if step_b > 0 and sector.syndicate_treasury >= step_b:
+				sector.syndicate_treasury -= step_b
+				syndicates_state[0]["treasury"] = sector.syndicate_treasury
+				bp["invested"] = int(bp["invested"]) + step_b
+				if int(bp["invested"]) >= req:
+					bp["unlocked"] = true
+
+	# Deterministic Rival Syndicate AI Counter-Raid check
+	var rival_attacker := 2 + (campaign_day % 3)
+	var euro_districts: Array[int] = []
+	for d in districts_state:
+		if int(d["owner"]) == 1:
+			euro_districts.append(int(d["id"]))
+	if euro_districts.size() >= 3 and campaign_day % 2 == 1:
+		var raided_did: int = euro_districts[euro_districts.size() - 1]
+		last_rival_raid_summary = "DAY %d: %s RAID ON D%d REPELLED BY EUROCORP SEC-GRID (+300 CR BOUNTY)" % [
+			campaign_day, SYN_SHORT.get(rival_attacker, "RIVAL"), raided_did
+		]
+		sector.syndicate_treasury += 300
+		syndicates_state[0]["treasury"] = sector.syndicate_treasury
+	else:
+		last_rival_raid_summary = "DAY %d: RIVAL SYNDICATES FORTIFYING SECTORS // NO BREACHES" % campaign_day
+
+	sector.dispatch_live_cpp_command("step_day:1")
+	status_toast = "DAY %d LEDGER SETTLED (NET %+d CR) // %s" % [
+		campaign_day, int(syndicates_state[0]["daily_net"]), last_rival_raid_summary
+	]
+	sector._refresh_hud()
+	queue_redraw()
+	return true
+
+
 func upgrade_selected_organ() -> bool:
 	var op_idx: int = sector.selected_operative
 	var cur_tier: int = operative_organs_tiers[op_idx][selected_organ_slot]
@@ -333,6 +449,7 @@ func upgrade_selected_organ() -> bool:
 	syndicates_state[0]["treasury"] = sector.syndicate_treasury
 	operative_organs_tiers[op_idx][selected_organ_slot] = cur_tier + 1
 	_sync_sector_organ_summary(op_idx)
+	sector.dispatch_live_cpp_command("organ:%d:%d:%d" % [op_idx, selected_organ_slot, cur_tier + 1])
 	status_toast = "INSTALLED V%d %s ON %s (-%d CR%s)" % [
 		cur_tier + 1,
 		ORGAN_SLOT_NAMES[selected_organ_slot].get_slice(" ", 0),
@@ -358,6 +475,9 @@ func thaw_cryo_replacement() -> bool:
 	var op_node: Node2D = sector._get_selected_operative_node()
 	if op_node != null:
 		op_node.visible = true
+	sector.dispatch_live_cpp_command("thaw:%d:%s" % [
+		sector.selected_operative, sector.OPERATIVE_CALLSIGNS[sector.selected_operative]
+	])
 	status_toast = "CRYO-STASIS VAT THAWED // NEW CORTICAL SUBJECT LINKED (-%d CR)" % cost
 	sector._refresh_hud()
 	queue_redraw()
@@ -385,6 +505,7 @@ func fund_selected_blueprint() -> bool:
 		status_toast = "R&D COMPLETE // %s UNLOCKED FOR SQUAD FABRICATION!" % bp["name"]
 	else:
 		status_toast = "ALLOCATED +%d CR TO %s (%d / %d CR)" % [step_cost, bp["name"], int(bp["invested"]), req]
+	sector.dispatch_live_cpp_command("research:%d:%d" % [int(bp["id"]), step_cost])
 	sector._refresh_hud()
 	queue_redraw()
 	return true
@@ -402,6 +523,7 @@ func equip_salvage_unit() -> bool:
 	var tier: int = int(bp["tier"])
 	operative_organs_tiers[op_idx][slot] = maxi(int(operative_organs_tiers[op_idx][slot]), tier)
 	_sync_sector_organ_summary(op_idx)
+	sector.dispatch_live_cpp_command("salvage_use:%d:0:%d" % [int(bp["id"]), op_idx])
 	status_toast = "EQUIPPED FIELD-SALVAGED %s DIRECTLY ONTO %s (1 PHYSICAL UNIT CONSUMED)" % [
 		bp["name"], sector.OPERATIVE_CALLSIGNS[op_idx]
 	]
@@ -429,6 +551,7 @@ func reverse_engineer_salvage_unit() -> bool:
 		status_toast = "REVERSE-ENGINEERING BREAKTHROUGH (+50%%) // %s UNLOCKED!" % bp["name"]
 	else:
 		status_toast = "SACRIFICED SALVAGE UNIT FOR +50%% R&D BREAKTHROUGH (+%d CR EQUIV ON %s)" % [boost, bp["name"]]
+	sector.dispatch_live_cpp_command("salvage_use:%d:1:%d" % [int(bp["id"]), sector.selected_operative])
 	sector._refresh_hud()
 	queue_redraw()
 	return true
@@ -456,7 +579,24 @@ func handle_key_input(keycode: int) -> bool:
 	if active_mode == ScreenMode.NONE:
 		return false
 
-	if active_mode == ScreenMode.RIPPERDOC_BAY:
+	if active_mode == ScreenMode.MEGACITY_MAP:
+		if keycode == KEY_RIGHT or keycode == KEY_D:
+			sector.set_focus_district(1 + (sector.focus_district_id % 6))
+			return true
+		if keycode == KEY_LEFT or keycode == KEY_A:
+			sector.set_focus_district(1 + ((sector.focus_district_id + 4) % 6))
+			return true
+		if keycode == KEY_R:
+			raid_district(sector.focus_district_id, false)
+			return true
+		if keycode == KEY_B:
+			rebuild_district_landmark(sector.focus_district_id)
+			return true
+		if keycode == KEY_T or keycode == KEY_ENTER:
+			advance_campaign_day()
+			return true
+
+	elif active_mode == ScreenMode.RIPPERDOC_BAY:
 		if keycode == KEY_DOWN or keycode == KEY_S:
 			selected_organ_slot = (selected_organ_slot + 1) % 6
 			queue_redraw()
@@ -623,11 +763,11 @@ func _draw_megacity_map(font: Font) -> void:
 	var big_tex: Texture2D = _landmark_rubble_tex.get(d_id) if d_rubble else _landmark_intact_tex.get(d_id)
 	if big_tex != null:
 		draw_node.draw_texture_rect(big_tex, Rect2(996, 174, 160, 180), false)
-	draw_node.draw_string(font, Vector2(928, 376), String(d_sel["name"]), HORIZONTAL_ALIGNMENT_LEFT, 296, 13, Color(0.25, 0.96, 1.0))
-	draw_node.draw_string(font, Vector2(928, 398), "CITY ORGAN: %s (%s)" % [d_sel["organ_name"], "RUBBLE CRATER" if d_rubble else "OPERATIONAL"], HORIZONTAL_ALIGNMENT_LEFT, 296, 11, Color(0.95, 0.85, 0.30))
-	draw_node.draw_multiline_string(font, Vector2(928, 420), "STRATEGIC PERK:\n  %s" % d_sel["perk"], HORIZONTAL_ALIGNMENT_LEFT, 296, 11, -1, Color(0.82, 0.94, 1.0))
-	draw_node.draw_multiline_string(font, Vector2(928, 464), "CONTROLLING SYNDICATE:\n  %s" % SYN_NAMES.get(int(d_sel["owner"]), "CONTESTED"), HORIZONTAL_ALIGNMENT_LEFT, 296, 11, -1, SYN_COLORS.get(int(d_sel["owner"]), Color.WHITE))
-	draw_node.draw_multiline_string(font, Vector2(928, 512), "SECTOR COMMANDS:\n  [F1-F6] Deploy Squad to District 1-6\n  [C] Toggle Landmark Structural Collapse\n  [U] Open Ripperdoc Cyber-Surgery Bay\n  [K] Open 3-Path R&D & Salvage Lab\n  [G / ESC] Return to Live Tactical View", HORIZONTAL_ALIGNMENT_LEFT, 296, 11, -1, Color(0.72, 0.88, 0.96))
+	draw_node.draw_string(font, Vector2(928, 372), "DAY %d // %s" % [campaign_day, String(d_sel["name"])], HORIZONTAL_ALIGNMENT_LEFT, 296, 12, Color(0.25, 0.96, 1.0))
+	draw_node.draw_string(font, Vector2(928, 392), "CITY ORGAN: %s (%s)" % [d_sel["organ_name"], "RUBBLE CRATER" if d_rubble else "OPERATIONAL"], HORIZONTAL_ALIGNMENT_LEFT, 296, 11, Color(0.95, 0.85, 0.30))
+	draw_node.draw_multiline_string(font, Vector2(928, 412), "STRATEGIC PERK:\n  %s" % d_sel["perk"], HORIZONTAL_ALIGNMENT_LEFT, 296, 10, -1, Color(0.82, 0.94, 1.0))
+	draw_node.draw_multiline_string(font, Vector2(928, 452), "CONTROLLING SYNDICATE:\n  %s" % SYN_NAMES.get(int(d_sel["owner"]), "CONTESTED"), HORIZONTAL_ALIGNMENT_LEFT, 296, 10, -1, SYN_COLORS.get(int(d_sel["owner"]), Color.WHITE))
+	draw_node.draw_multiline_string(font, Vector2(928, 496), "CAMPAIGN & SECTOR COMMANDS:\n  [F1-F6 / A-D] Select & Deploy to District\n  [R] Launch Tactical Raid / Capture District\n  [B] Rebuild Rubble Landmark (-1200 CR)\n  [T / ENTER] Advance Campaign Day (+Yield)\n  [U] Ripperdoc Bay | [K] R&D Lab | [ESC] Back", HORIZONTAL_ALIGNMENT_LEFT, 296, 10, -1, Color(0.72, 0.88, 0.96))
 
 
 func _draw_ripperdoc_bay(font: Font) -> void:
