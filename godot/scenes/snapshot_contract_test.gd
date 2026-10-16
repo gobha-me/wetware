@@ -154,6 +154,49 @@ func _initialize() -> void:
 		quit(1)
 		return
 
+	# Verify M11: 8-direction vehicle turntable mapping, 2:1 isometric road-lane alignment, traffic stepping & destruction
+	var expected_dir_frames := [
+		[Vector2(-2.0, -1.0), 0], # NW (-gx)
+		[Vector2(-1.0, 0.0), 1],  # W
+		[Vector2(-2.0, 1.0), 2],  # SW (+gy)
+		[Vector2(0.0, 1.0), 3],   # S
+		[Vector2(2.0, 1.0), 4],   # SE (+gx)
+		[Vector2(1.0, 0.0), 5],   # E
+		[Vector2(2.0, -1.0), 6],  # NE (-gy)
+		[Vector2(0.0, -1.0), 7],  # N
+	]
+	for pair in expected_dir_frames:
+		var got_frame: int = sector._vehicle_dir_to_frame(pair[0])
+		if got_frame != int(pair[1]):
+			push_error("_vehicle_dir_to_frame(%s) returned %d, expected %d" % [str(pair[0]), got_frame, int(pair[1])])
+			quit(1)
+			return
+	for vehicle_node_name in all_18_vehicles:
+		var vnode := sector.get_node_or_null(vehicle_node_name) as Sprite2D
+		if vnode.frame % 2 != 0:
+			push_error("Vehicle/prop node %s started on non-isometric frame %d" % [vehicle_node_name, vnode.frame])
+			quit(1)
+			return
+	if sector._street_vehicles.size() != 7:
+		push_error("Expected 7 active street traffic vehicles, got %d" % sector._street_vehicles.size())
+		quit(1)
+		return
+	var interceptor := sector.get_node_or_null("CorpSecurityInterceptor") as Sprite2D
+	var prev_interceptor_pos := interceptor.position
+	sector._step_street_vehicles(0.5)
+	if interceptor.position.distance_to(prev_interceptor_pos) < 5.0:
+		push_error("Street vehicle traffic did not advance along road lane")
+		quit(1)
+		return
+	if not sector._damage_street_vehicle_at(interceptor.position, 120):
+		push_error("Failed to hit street vehicle at its world position")
+		quit(1)
+		return
+	if not bool(sector._street_vehicles[1]["destroyed"]):
+		push_error("Street vehicle was not marked destroyed after taking lethal damage")
+		quit(1)
+		return
+
 	# Reject malformed / adversarial snapshots
 	var bad_cases: Array = [
 		null,

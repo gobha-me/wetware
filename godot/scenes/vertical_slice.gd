@@ -153,6 +153,8 @@ var _city_building_is_tenement: Array[bool] = []
 var _building_alpha: Dictionary = {}
 var _occluded_actor_ids: Dictionary = {}
 var _proc_civilians: Array[Dictionary] = []
+var _street_vehicles: Array[Dictionary] = []
+var _extra_prop_nodes: Array[Sprite2D] = []
 var _m7_initialized: bool = false
 
 # M8 snapshot replay: rival operatives exist only when created from an
@@ -552,22 +554,23 @@ func _populate_surrounding_city_blocks(floor_root: Node2D) -> void:
 		_city_building_is_tenement.append(is_tenement)
 		_building_alpha[b_node.get_instance_id()] = 1.0
 
-	# Perimeter vehicles & infrastructure across the outer avenues
+	# Perimeter vehicles & infrastructure across the outer avenues (aligned to 2:1 isometric road lanes)
 	var extra_props := [
-		[hauler_tpl, Vector2(-6, -3), 2, 1],
-		[dozer_tpl, Vector2(6, -3), 6, 1],
-		[decon_tpl, Vector2(-3, 6), 0, 1],
-		[gate_tpl, Vector2(0, -6), 3, 1],
-		[gate_tpl, Vector2(0, 6), 7, 1],
-		[turret_tpl, Vector2(-6, 3), 2, 1],
-		[turret_tpl, Vector2(6, 3), 6, 1],
-		[vending_tpl, Vector2(-4, -2), 1, 1],
-		[vending_tpl, Vector2(4, 2), 5, 1],
-		[hvac_tpl, Vector2(-6, -5), 3, 2],
-		[hvac_tpl, Vector2(6, -5), 5, 2],
-		[vat_tpl, Vector2(-6, 0), 2, 0],
-		[vat_tpl, Vector2(6, 0), 6, 0],
+		[hauler_tpl, Vector2(-6, -3), 4, 1, "ExtraHauler"],
+		[dozer_tpl, Vector2(6, -3), 0, 1, "ExtraDozer"],
+		[decon_tpl, Vector2(-3, 6), 6, 1, "ExtraDecon"],
+		[gate_tpl, Vector2(0, -6), 0, 1, "ExtraGateNorth"],
+		[gate_tpl, Vector2(0, 6), 4, 1, "ExtraGateSouth"],
+		[turret_tpl, Vector2(-6, 3), 4, 1, "ExtraTurretWest"],
+		[turret_tpl, Vector2(6, 3), 0, 1, "ExtraTurretEast"],
+		[vending_tpl, Vector2(-4, -2), 0, 1, "ExtraVendingWest"],
+		[vending_tpl, Vector2(4, 2), 4, 1, "ExtraVendingEast"],
+		[hvac_tpl, Vector2(-6, -5), 2, 2, "ExtraHvacWest"],
+		[hvac_tpl, Vector2(6, -5), 6, 2, "ExtraHvacEast"],
+		[vat_tpl, Vector2(-6, 0), 2, 0, "ExtraVatWest"],
+		[vat_tpl, Vector2(6, 0), 6, 0, "ExtraVatEast"],
 	]
+	var extra_vehicle_map := {}
 	for item in extra_props:
 		var tpl: Sprite2D = item[0]
 		if tpl == null:
@@ -575,16 +578,97 @@ func _populate_surrounding_city_blocks(floor_root: Node2D) -> void:
 		var g: Vector2 = item[1]
 		var iso := Vector2((g.x - g.y) * 64.0, (g.x + g.y) * 32.0)
 		var p := Sprite2D.new()
+		p.name = String(item[4])
 		p.texture = tpl.texture
-		p.material = tpl.material
+		p.material = (tpl.material as ShaderMaterial).duplicate() if tpl.material is ShaderMaterial else tpl.material
 		p.hframes = tpl.hframes
 		p.frame = int(item[2])
 		var st := int(item[3])
-		var base_y := 388.0 if st == 1 else (500.0 if st == 0 else 196.0)
+		var base_y := 376.0 if st == 1 else (500.0 if st == 0 else 196.0)
 		var scale_iso := 1.0 if st == 1 else (0.85 if st == 0 else 0.9)
 		p.position = Vector2(640, base_y) + iso * scale_iso
 		p.set_meta("stratum", st)
-		floor_root.add_child(p)
+		if st == 1:
+			p.z_index = int(p.position.y)
+			add_child(p)
+			_extra_prop_nodes.append(p)
+			extra_vehicle_map[p.name] = p
+		else:
+			floor_root.add_child(p)
+
+	_init_street_vehicle_traffic(extra_vehicle_map)
+
+func _register_street_vehicle(v_node: Sprite2D, grid_waypoints: Array, speed: float, init_dir: Vector2, is_convoy: bool = false) -> void:
+	if v_node == null:
+		return
+	if v_node.material is ShaderMaterial:
+		v_node.material = (v_node.material as ShaderMaterial).duplicate()
+	var wps: Array[Vector2] = []
+	for g in grid_waypoints:
+		var gv: Vector2 = g
+		wps.append(_grid_to_street_pos(gv.x, gv.y))
+	_update_vehicle_facing(v_node, init_dir)
+	v_node.z_index = int(v_node.position.y)
+	_street_vehicles.append({
+		"node": v_node,
+		"waypoints": wps,
+		"wp_index": 0,
+		"speed": speed,
+		"vel_dir": init_dir.normalized(),
+		"hp": 100,
+		"max_hp": 100,
+		"destroyed": false,
+		"is_convoy": is_convoy,
+	})
+
+func _init_street_vehicle_traffic(extra_vehicle_map: Dictionary) -> void:
+	_street_vehicles.clear()
+	_register_street_vehicle(
+		get_node_or_null("ExecutiveArmoredLimo") as Sprite2D,
+		[Vector2(3, 3), Vector2(3, -3), Vector2(-3, -3), Vector2(-3, 3)],
+		42.0,
+		Vector2(2.0, 1.0),
+		true
+	)
+	_register_street_vehicle(
+		get_node_or_null("CorpSecurityInterceptor") as Sprite2D,
+		[Vector2(3, -3), Vector2(-3, -3), Vector2(-3, 3), Vector2(3, 3)],
+		58.0,
+		Vector2(2.0, -1.0)
+	)
+	_register_street_vehicle(
+		get_node_or_null("SyndicateApc") as Sprite2D,
+		[Vector2(3, 3), Vector2(3, 9), Vector2(-3, 9), Vector2(-3, 3)],
+		36.0,
+		Vector2(2.0, 1.0)
+	)
+	_register_street_vehicle(
+		get_node_or_null("AutonomousCargoHauler") as Sprite2D,
+		[Vector2(-3, 3), Vector2(-9, 3), Vector2(-9, -3), Vector2(-3, -3)],
+		32.0,
+		Vector2(-2.0, 1.0)
+	)
+	if extra_vehicle_map.has("ExtraHauler"):
+		_register_street_vehicle(
+			extra_vehicle_map["ExtraHauler"] as Sprite2D,
+			[Vector2(3, -3), Vector2(3, -9), Vector2(-9, -9), Vector2(-9, -3)],
+			34.0,
+			Vector2(2.0, 1.0)
+		)
+	if extra_vehicle_map.has("ExtraDozer"):
+		_register_street_vehicle(
+			extra_vehicle_map["ExtraDozer"] as Sprite2D,
+			[Vector2(3, -3), Vector2(3, 3), Vector2(9, 3), Vector2(9, -3)],
+			28.0,
+			Vector2(-2.0, -1.0)
+		)
+	if extra_vehicle_map.has("ExtraDecon"):
+		_register_street_vehicle(
+			extra_vehicle_map["ExtraDecon"] as Sprite2D,
+			[Vector2(-3, 3), Vector2(3, 3), Vector2(3, 9), Vector2(-3, 9)],
+			30.0,
+			Vector2(2.0, -1.0)
+		)
 
 func _grid_to_street_pos(gx: float, gy: float) -> Vector2:
 	return Vector2(640.0 + (gx - gy) * 64.0, 376.0 + (gx + gy) * 32.0)
@@ -775,9 +859,10 @@ func _process(delta: float) -> void:
 				_update_sprite_facing(op_node, dir)
 			needs_redraw = true
 
-	# Step procedural civilian crowd (the snapshot replay drives them itself)
+	# Step procedural civilian crowd and street vehicle traffic
 	if _replay == null:
 		_step_procedural_civilians(real_dt)
+	_step_street_vehicles(real_dt)
 
 	# Update multi-pose stride/combat rows & depth sorting across all actors
 	_update_actor_animations_and_depth(real_dt)
@@ -830,6 +915,38 @@ func _step_procedural_civilians(real_dt: float) -> void:
 			c_node.position += dir * spd * real_dt
 			_update_sprite_facing(c_node, dir)
 
+func _step_street_vehicles(real_dt: float) -> void:
+	for v_entry in _street_vehicles:
+		var v_node: Sprite2D = v_entry["node"]
+		if v_node == null or not v_node.visible:
+			continue
+		if bool(v_entry["destroyed"]) or (bool(v_entry["is_convoy"]) and convoy_intercepted):
+			continue
+		var wps: Array = v_entry["waypoints"]
+		if wps.is_empty():
+			continue
+		var wp_idx: int = int(v_entry["wp_index"]) % wps.size()
+		var tgt: Vector2 = wps[wp_idx]
+		var spd: float = float(v_entry["speed"])
+		var delta_vec := tgt - v_node.position
+		var dist := delta_vec.length()
+		if dist <= 6.0:
+			wp_idx = (wp_idx + 1) % wps.size()
+			v_entry["wp_index"] = wp_idx
+			tgt = wps[wp_idx]
+			delta_vec = tgt - v_node.position
+			dist = delta_vec.length()
+		if dist > 0.01:
+			var seg_dir := delta_vec / dist
+			v_node.position += seg_dir * minf(spd * real_dt, dist)
+			var cur_dir: Vector2 = v_entry["vel_dir"]
+			# Smoothly rotate through the 45-degree corner transition frames near intersections,
+			# and lock tightly to the 2:1 isometric road lane on straightaways.
+			var turn_rate := 8.5 if dist < 28.0 else 18.0
+			cur_dir = cur_dir.lerp(seg_dir, clampf(real_dt * turn_rate, 0.0, 1.0)).normalized()
+			v_entry["vel_dir"] = cur_dir
+			_update_vehicle_facing(v_node, cur_dir)
+
 func _update_actor_animations_and_depth(real_dt: float) -> void:
 	var all_actors: Array[Sprite2D] = []
 	for op_name in OPERATIVE_NODES:
@@ -881,11 +998,18 @@ func _update_actor_animations_and_depth(real_dt: float) -> void:
 		else:
 			actor.z_index = int(actor.position.y)
 
-	# Also depth-sort street vehicles so buildings/agents sort cleanly around them
-	for v_name in ["ExecutiveArmoredLimo", "SyndicateInterceptorCar", "StreetNoodleCart"]:
+	# Depth-sort all street vehicles and street props so buildings/agents sort cleanly around them
+	for v_name in [
+		"ExecutiveArmoredLimo", "CorpSecurityInterceptor", "SyndicateApc", "AutonomousCargoHauler",
+		"AutomatedCheckpointGate", "ConcreteRiotBarricade", "StreetVendingMachineBank",
+		"CyberClinicMedPod", "PlasmaSentryTurret"
+	]:
 		var v := get_node_or_null(v_name) as Node2D
 		if v:
 			v.z_index = int(v.position.y)
+	for ep in _extra_prop_nodes:
+		if ep != null:
+			ep.z_index = int(ep.position.y)
 
 func _update_building_proximity_cutaway(real_dt: float) -> bool:
 	var changed := false
@@ -943,22 +1067,21 @@ func _step_demo_reel(f: int) -> void:
 		_cam_target_pos = Vector2(545, 425)
 		_cam_target_zoom = 1.02
 	elif f > 1 and f < 46:
-		var limo := get_node_or_null("ExecutiveArmoredLimo") as Sprite2D
-		if limo and not convoy_intercepted:
-			limo.position += Vector2(0.85, 0.42)
 		var null_op := get_node_or_null("OperativeNull3") as Sprite2D
 		if null_op:
 			var nd := Vector2(-0.7, 0.45)
 			null_op.position += nd
 			_update_sprite_facing(null_op, nd)
+	var limo_node := get_node_or_null("ExecutiveArmoredLimo") as Node2D
+	var limo_aim := limo_node.position if limo_node != null else Vector2(460, 478)
 	if f == 16:
-		_fire_active_weapon_at(Vector2(490, 470))
+		_fire_active_weapon_at(limo_aim)
 	elif f == 28:
 		active_weapon_index = 1
 		_update_operative_card()
-		_fire_active_weapon_at(Vector2(498, 474))
+		_fire_active_weapon_at(limo_aim)
 	elif f == 36:
-		_fire_active_weapon_at(Vector2(504, 478))
+		_fire_active_weapon_at(limo_aim)
 		_intercept_executive_convoy()
 
 	# Act II (49..96): Female Operative NULL-3, Persuadertron Neural-Mesh & Infinite Civilian Crowd
@@ -1476,6 +1599,19 @@ func _select_operative(index: int) -> void:
 func _get_selected_operative_node() -> Sprite2D:
 	return get_node_or_null(OPERATIVE_NODES[selected_operative]) as Sprite2D
 
+func _vehicle_dir_to_frame(dir: Vector2) -> int:
+	if dir.length_squared() < 0.0001:
+		return 0
+	var iso_v := Vector2(dir.x, dir.y * 2.0)
+	var ang := atan2(iso_v.y, iso_v.x)
+	var steps := int(round((-0.75 * PI - ang) / (0.25 * PI)))
+	return ((steps % 8) + 8) % 8
+
+func _update_vehicle_facing(sprite: Sprite2D, dir: Vector2) -> void:
+	if sprite == null or sprite.hframes != 8:
+		return
+	sprite.frame = _vehicle_dir_to_frame(dir)
+
 func _update_sprite_facing(sprite: Sprite2D, dir: Vector2) -> void:
 	if sprite == null or sprite.hframes != 8:
 		return
@@ -1488,6 +1624,35 @@ func _update_sprite_facing(sprite: Sprite2D, dir: Vector2) -> void:
 		sprite.frame_coords = Vector2i(sector, sprite.frame_coords.y)
 	else:
 		sprite.frame = sector
+
+func _damage_street_vehicle_at(target_pos: Vector2, dmg: int) -> bool:
+	var hit_any := false
+	for v_entry in _street_vehicles:
+		var v_node: Sprite2D = v_entry["node"]
+		if v_node == null or not v_node.visible:
+			continue
+		if v_node.position.distance_to(target_pos) <= 68.0:
+			hit_any = true
+			var next_hp: int = max(0, int(v_entry["hp"]) - dmg)
+			v_entry["hp"] = next_hp
+			if v_node.material is ShaderMaterial:
+				var smat := v_node.material as ShaderMaterial
+				smat.set_shader_parameter("pulse_tint", Vector3(1.0, 0.35, 0.1))
+				smat.set_shader_parameter("pulse_intensity", 0.55)
+			if next_hp <= 0 and not bool(v_entry["destroyed"]):
+				v_entry["destroyed"] = true
+				v_entry["speed"] = 0.0
+				if v_node.material is ShaderMaterial:
+					var smat := v_node.material as ShaderMaterial
+					smat.set_shader_parameter("blackout_factor", 0.38)
+					smat.set_shader_parameter("pulse_tint", Vector3(1.0, 0.28, 0.06))
+					smat.set_shader_parameter("pulse_intensity", 0.62)
+				if bool(v_entry["is_convoy"]):
+					_intercept_executive_convoy()
+				else:
+					syndicate_treasury += 400
+					_refresh_hud()
+	return hit_any
 
 func _fire_active_weapon_at(target_pos: Vector2) -> void:
 	var op_node := _get_selected_operative_node()
@@ -1505,11 +1670,13 @@ func _fire_active_weapon_at(target_pos: Vector2) -> void:
 	tracer_end = target_pos
 	tracer_timer = 0.28
 
+	var wpn_dmg := 100 if (active_weapon_index == 2 or active_weapon_index == 3) else 40
 	if active_weapon_index == 2 or active_weapon_index == 3:
 		tracer_color = Color(1.0, 0.48, 0.18, 1.0)
 	else:
 		tracer_color = Color(0.25, 0.95, 1.0, 1.0)
 
+	_damage_street_vehicle_at(target_pos, wpn_dmg)
 	if target_pos.distance_to(Vector2(640, 292)) < 110.0 and not tower_collapsed:
 		set_tower_collapsed(true)
 	_request_overlay_redraw()
@@ -1541,11 +1708,15 @@ func _trigger_persuadertron_wave() -> void:
 	_request_overlay_redraw()
 
 func _clear_actor_shader_pulses() -> void:
-	for actor_name in ["MegacityCivilian1", "MegacityCivilian2", "CorpSecGuard1", "CorpSecGuard2", "ExecutiveArmoredLimo"]:
+	for actor_name in ["MegacityCivilian1", "MegacityCivilian2", "CorpSecGuard1", "CorpSecGuard2"]:
 		var actor := get_node_or_null(actor_name) as Sprite2D
 		if actor and actor.material is ShaderMaterial:
 			var smat := actor.material as ShaderMaterial
 			smat.set_shader_parameter("pulse_intensity", 0.0)
+	for v_entry in _street_vehicles:
+		var vn: Sprite2D = v_entry["node"]
+		if vn and vn.material is ShaderMaterial and not bool(v_entry["destroyed"]):
+			(vn.material as ShaderMaterial).set_shader_parameter("pulse_intensity", 0.0)
 	for c_entry in _proc_civilians:
 		var cn: Sprite2D = c_entry["node"]
 		if cn and cn.material is ShaderMaterial:
