@@ -189,6 +189,12 @@ const DISTRICT_TOPOLOGIES := {
 	},
 }
 
+# M18 Front-End Title Menu, Pause/Settings & Audio Volume State
+var master_volume_pct: int = 100
+var sfx_volume_pct: int = 100
+var music_volume_pct: int = 80
+var integer_scaling_enabled: bool = true
+
 # Interactive VFX state rendered on foreground TacticalOverlay inside TacticalHud
 var move_target_pos: Vector2 = Vector2.ZERO
 var has_move_target: bool = false
@@ -1937,8 +1943,20 @@ func _setup_spatial_audio() -> void:
 	_sfx_player_2d.attenuation = 1.15
 	add_child(_sfx_player_2d)
 
-	for s_name in ["gauss", "minigun", "plasma", "persuade", "collapse"]:
+	for s_name in ["gauss", "minigun", "plasma", "persuade", "collapse", "ui_click", "extract", "alarm", "explosion"]:
 		_sfx_streams[s_name] = _synthesize_sfx_wav(s_name, 0.28)
+
+func set_audio_volumes(master_pct: int, sfx_pct: int, music_pct: int) -> void:
+	master_volume_pct = clampi(master_pct, 0, 100)
+	sfx_volume_pct = clampi(sfx_pct, 0, 100)
+	music_volume_pct = clampi(music_pct, 0, 100)
+	var master_scale := float(master_volume_pct) / 100.0
+	if _sfx_player_2d != null:
+		var sfx_lin := maxf(0.001, master_scale * (float(sfx_volume_pct) / 100.0))
+		_sfx_player_2d.volume_db = linear_to_db(sfx_lin)
+	if _ambient_player != null:
+		var mus_lin := maxf(0.001, master_scale * (float(music_volume_pct) / 100.0) * 0.35)
+		_ambient_player.volume_db = linear_to_db(mus_lin)
 
 func _synthesize_sfx_wav(kind: String, duration_sec: float) -> AudioStreamWAV:
 	var mix_rate := 11025
@@ -1963,6 +1981,15 @@ func _synthesize_sfx_wav(kind: String, duration_sec: float) -> AudioStreamWAV:
 				sig = env * (0.5 * sin(TAU * 528.0 * t) + 0.5 * sin(TAU * 660.0 * t))
 			"collapse":
 				sig = env * (0.7 * sin(TAU * 48.0 * t) + 0.3 * cos(TAU * 93.0 * t))
+			"ui_click":
+				sig = env * env * sin(TAU * 1240.0 * t)
+			"extract":
+				sig = env * (0.5 * sin(TAU * (440.0 + 360.0 * t) * t) + 0.5 * sin(TAU * 880.0 * t))
+			"alarm":
+				var alt_f := 780.0 if int(t * 8.0) % 2 == 0 else 540.0
+				sig = env * sin(TAU * alt_f * t)
+			"explosion":
+				sig = env * (0.65 * sin(TAU * 62.0 * t) + 0.35 * sin(TAU * 145.0 * t))
 		var sample_i16 := clampi(int(sig * 14000.0), -32767, 32767)
 		pcm.encode_s16(i * 2, sample_i16)
 	var wav := AudioStreamWAV.new()
@@ -2402,6 +2429,35 @@ func load_campaign(path: String = "user://wetware_campaign_save.json") -> bool:
 	set_focus_district(int(d.get("focus_district_id", focus_district_id)))
 	_refresh_hud()
 	return true
+
+func start_new_campaign() -> void:
+	_ensure_m7_initialized()
+	syndicate_treasury = 6000
+	salvage_units = 1
+	missions_completed = 0
+	for i in range(4):
+		operative_hp[i] = 100
+		operative_armor[i] = 50
+		operative_downed[i] = false
+	_live_cpp_command_log.clear()
+	last_digest = "0x9f4a2c18e7b03d11"
+	if _hq_screens != null:
+		_hq_screens._init_default_state()
+		_hq_screens.campaign_day = 1
+		_hq_screens.pending_defense_district = 0
+		_hq_screens.campaign_outcome = "ACTIVE"
+		_hq_screens.status_toast = "NEW SYNDICATE CAMPAIGN INITIALIZED // DAY 1"
+	set_focus_district(1)
+	set_hq_screen(0)
+	play_sfx("ui_click")
+	_refresh_hud()
+
+func toggle_pause_menu() -> int:
+	_ensure_m7_initialized()
+	var next_mode := 0 if get_hq_screen() == 5 else 5
+	set_hq_screen(next_mode)
+	play_sfx("ui_click")
+	return get_hq_screen()
 
 func valid_snapshot(data: Variant) -> bool:
 	if typeof(data) != TYPE_DICTIONARY:

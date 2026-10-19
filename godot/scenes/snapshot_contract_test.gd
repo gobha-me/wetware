@@ -370,6 +370,36 @@ func _initialize() -> void:
 	sector.load_campaign(tmp_save_path)
 	sector.set_focus_district(1)
 
+	# Verify M18: Front-End Title Screen, Pause/Settings Menu, 9-SFX Bank & Shippable v1.0 Controls
+	sector.set_hq_screen(4)
+	if sector.get_hq_screen() != 4:
+		push_error("M18 Title Screen mode (4) failed to activate")
+		quit(1)
+		return
+	if sector.toggle_pause_menu() != 5:
+		push_error("M18 toggle_pause_menu did not open Pause/Settings Menu (5)")
+		quit(1)
+		return
+	if sector.toggle_pause_menu() != 0:
+		push_error("M18 toggle_pause_menu did not return to Tactical Sector (0)")
+		quit(1)
+		return
+	sector.set_audio_volumes(85, 90, 70)
+	if sector.master_volume_pct != 85 or sector.sfx_volume_pct != 90 or sector.music_volume_pct != 70:
+		push_error("M18 set_audio_volumes did not update master/sfx/music percentages")
+		quit(1)
+		return
+	for sfx_key in ["gauss", "minigun", "plasma", "persuade", "collapse", "ui_click", "extract", "alarm", "explosion"]:
+		if not sector._sfx_streams.has(sfx_key):
+			push_error("M18 missing procedural SFX waveform '%s'" % sfx_key)
+			quit(1)
+			return
+	sector.start_new_campaign()
+	if sector.syndicate_treasury != 6000 or sector._hq_screens.campaign_day != 1 or sector.get_hq_screen() != 0:
+		push_error("M18 start_new_campaign did not reset campaign state cleanly")
+		quit(1)
+		return
+
 	# Reject malformed / adversarial snapshots
 	var bad_cases: Array = [
 		null,

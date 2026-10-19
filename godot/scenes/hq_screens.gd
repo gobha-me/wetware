@@ -9,6 +9,8 @@ enum ScreenMode {
 	MEGACITY_MAP = 1,
 	RIPPERDOC_BAY = 2,
 	RND_SALVAGE_LAB = 3,
+	TITLE_MENU = 4,
+	PAUSE_SETTINGS = 5,
 }
 
 const SYN_COLORS := {
@@ -310,7 +312,7 @@ func sync_from_snapshot(data: Dictionary) -> void:
 
 
 func set_mode(mode: int) -> void:
-	active_mode = clampi(mode, 0, 3)
+	active_mode = clampi(mode, 0, 5)
 	queue_redraw()
 
 
@@ -626,8 +628,17 @@ func handle_key_input(keycode: int) -> bool:
 	if keycode == KEY_K or keycode == KEY_F9:
 		set_mode(ScreenMode.NONE if active_mode == ScreenMode.RND_SALVAGE_LAB else ScreenMode.RND_SALVAGE_LAB)
 		return true
-	if keycode == KEY_ESCAPE and active_mode != ScreenMode.NONE:
-		set_mode(ScreenMode.NONE)
+	if keycode == KEY_F10:
+		set_mode(ScreenMode.NONE if active_mode == ScreenMode.PAUSE_SETTINGS else ScreenMode.PAUSE_SETTINGS)
+		return true
+	if keycode == KEY_F11:
+		set_mode(ScreenMode.NONE if active_mode == ScreenMode.TITLE_MENU else ScreenMode.TITLE_MENU)
+		return true
+	if keycode == KEY_ESCAPE:
+		if active_mode != ScreenMode.NONE:
+			set_mode(ScreenMode.NONE)
+		else:
+			set_mode(ScreenMode.PAUSE_SETTINGS)
 		return true
 
 	if active_mode == ScreenMode.NONE:
@@ -697,6 +708,17 @@ func handle_key_input(keycode: int) -> bool:
 			reverse_engineer_salvage_unit()
 			return true
 
+	elif active_mode == ScreenMode.TITLE_MENU or active_mode == ScreenMode.PAUSE_SETTINGS:
+		if keycode == KEY_N or keycode == KEY_ENTER:
+			sector.start_new_campaign()
+			return true
+		if keycode == KEY_S:
+			sector.save_campaign()
+			return true
+		if keycode == KEY_L:
+			sector.load_campaign()
+			return true
+
 	return false
 
 
@@ -736,12 +758,36 @@ func _draw_hq_screen() -> void:
 		_draw_ripperdoc_bay(font)
 	elif active_mode == ScreenMode.RND_SALVAGE_LAB:
 		_draw_rnd_salvage_lab(font)
+	elif active_mode == ScreenMode.TITLE_MENU or active_mode == ScreenMode.PAUSE_SETTINGS:
+		_draw_title_and_settings_overlay(font)
 
 	# Bottom Status Toast & Control Strip
 	var footer := Rect2(40, 654, 1200, 34)
 	draw_node.draw_rect(footer, Color(0.02, 0.04, 0.08, 0.95), true)
 	draw_node.draw_rect(footer, Color(0.22, 0.78, 0.92, 0.85), false, 1.2)
 	draw_node.draw_string(font, Vector2(54, 676), status_toast, HORIZONTAL_ALIGNMENT_LEFT, 1170, 12, Color(0.98, 0.86, 0.28, 1.0))
+
+
+func _draw_title_and_settings_overlay(font: Font) -> void:
+	var box := Rect2(260, 130, 760, 480)
+	draw_node.draw_rect(box, Color(0.02, 0.04, 0.09, 0.98), true)
+	draw_node.draw_rect(box, Color(0.25, 0.96, 1.0, 1.0), false, 2.2)
+	var header := "WETWARE // MEGACITY SYNDICATE WAR v1.0" if active_mode == ScreenMode.TITLE_MENU else "TACTICAL PAUSE & SYSTEM CONFIGURATION"
+	draw_node.draw_string(font, Vector2(290, 178), header, HORIZONTAL_ALIGNMENT_LEFT, 700, 20, Color(0.25, 0.98, 1.0, 1.0))
+	var items := [
+		"[ENTER / N] START NEW MEGACITY WAR CAMPAIGN",
+		"[L] CONTINUE SAVED CAMPAIGN (user://wetware_campaign_save.json)",
+		"[S] SAVE CURRENT CAMPAIGN LEDGER & SQUAD STATE",
+		"[G] OPEN STRATEGIC 6-DISTRICT MEGACITY MAP",
+		"AUDIO LEVELS: MASTER %d%% | SFX %d%% | SYNTH %d%%" % [sector.master_volume_pct, sector.sfx_volume_pct, sector.music_volume_pct],
+		"DISPLAY: 2:1 ISOMETRIC INTEGER SCALING (%s)" % ("ENABLED" if sector.integer_scaling_enabled else "DISABLED"),
+		"[ESC] RESUME TACTICAL SECTOR OPERATIONS",
+	]
+	for idx in range(items.size()):
+		var row := Rect2(290, 210 + idx * 50, 700, 38)
+		draw_node.draw_rect(row, Color(0.05, 0.12, 0.18, 0.92), true)
+		draw_node.draw_rect(row, Color(0.22, 0.78, 0.92, 0.85), false, 1.2)
+		draw_node.draw_string(font, Vector2(row.position.x + 14, row.position.y + 24), items[idx], HORIZONTAL_ALIGNMENT_LEFT, 670, 13, Color(0.92, 0.96, 1.0, 1.0))
 
 
 func _draw_megacity_map(font: Font) -> void:
