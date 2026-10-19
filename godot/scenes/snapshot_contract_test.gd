@@ -256,6 +256,46 @@ func _initialize() -> void:
 		return
 	sector.set_tower_collapsed(false)
 
+	# Verify M15: Multi-operative squad selection, cover mitigation, hostile AI return fire & salvage drops
+	sector.select_full_squad()
+	if sector.selected_squad_indices.size() != 4:
+		push_error("M15 select_full_squad did not select all 4 operatives")
+		quit(1)
+		return
+	if sector._hostile_defenders.size() != 3:
+		push_error("M15 expected 3 hostile defenders, got %d" % sector._hostile_defenders.size())
+		quit(1)
+		return
+	var barricade := sector.get_node_or_null("ConcreteRiotBarricade") as Node2D
+	var op0 := sector.get_node_or_null("OperativeKestrel1") as Node2D
+	var orig_op0_pos := op0.position
+	op0.position = barricade.position + Vector2(12, 8)
+	if not sector.is_operative_in_cover(0):
+		push_error("M15 operative next to ConcreteRiotBarricade was not detected in cover")
+		quit(1)
+		return
+	var cover_loss: int = sector.apply_operative_damage(0, 20)
+	if cover_loss >= 10:
+		push_error("M15 cover mitigation + armor did not reduce 20 incoming damage (lost %d HP)" % cover_loss)
+		quit(1)
+		return
+	op0.position = orig_op0_pos
+	sector.crowd_surge_active = false
+	if not sector.step_hostile_combat_ai(1.0):
+		push_error("M15 step_hostile_combat_ai did not trigger enemy return fire")
+		quit(1)
+		return
+	var guard1 := sector.get_node_or_null("CorpSecGuard1") as Node2D
+	var prev_drops: int = sector._salvage_drops.size()
+	if not sector._damage_hostile_defender_at(guard1.position, 120):
+		push_error("M15 _damage_hostile_defender_at failed to hit CorpSecGuard1")
+		quit(1)
+		return
+	if bool(sector._hostile_defenders[0]["alive"]) or sector._salvage_drops.size() != prev_drops + 1:
+		push_error("M15 lethal hit on CorpSecGuard1 did not mark dead and spawn salvage drop")
+		quit(1)
+		return
+
 	# Reject malformed / adversarial snapshots
 	var bad_cases: Array = [
 		null,

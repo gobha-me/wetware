@@ -227,6 +227,18 @@ bool execute_script_statement(std::string_view stmt, MegacitySimulation& sim,
     focus = did;
     return true;
   }
+  if (op == "combat_tick") {
+    const auto did = static_cast<DistrictId>(arg_i64(1, focus));
+    const auto b_id = static_cast<BuildingId>(did * 10U);
+    deploy(sim, kEuroCorp, 0, b_id, 6, 6, Stratum::Street);
+    deploy(sim, kZaibatsu, 0, b_id, 10, 6, Stratum::Street);
+    fire(sim, kZaibatsu, 0, did, WeaponId::Minigun, 6, 6, Stratum::Street);
+    fire(sim, kEuroCorp, 0, did, WeaponId::SuppressedGauss, 10, 6,
+         Stratum::Street);
+    sim.step_tick();
+    focus = did;
+    return true;
+  }
   if (op == "step_day") {
     const auto ticks = arg_i64(1, 1);
     for (std::int64_t t = 0; t < ticks; ++t) {

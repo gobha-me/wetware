@@ -585,14 +585,16 @@ void test_live_command_script_execution() {
   auto sim_b = wetware::create_default_vertical_slice();
 
   constexpr std::string_view kScript =
-      "focus:2;organ:0:0:3;research:1:350;convoy:1;sabotage:1;raid:2:0;"
-      "step_day:1";
+      "focus:2;organ:0:0:3;research:1:350;convoy:1;sabotage:1;combat_tick:2;"
+      "raid:2:0;step_day:1";
   const auto focus_a = wetware::run_command_script(kScript, sim_a);
   const auto focus_b = wetware::run_command_script(kScript, sim_b);
   require(focus_a.has_value() && focus_b == focus_a && *focus_a == 2,
           "Command script sets focus district to 2");
   require(sim_a.state_digest() == sim_b.state_digest(),
           "Identical command scripts produce identical state_digest");
+  require(count_events(sim_a, wetware::SimEventKind::ShotFired) >= 2,
+          "combat_tick command fires live exchange shots");
   require(sim_a.find_district(2)->owner_syndicate == 1,
           "Raid command captures District 2 for EuroCorp");
   require(!wetware::run_command_script("unknown_opcode:1", sim_a).has_value(),
