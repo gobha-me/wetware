@@ -2315,6 +2315,94 @@ func get_hq_screen() -> int:
 		return int(_hq_screens.active_mode)
 	return 0
 
+func save_campaign(path: String = "user://wetware_campaign_save.json") -> bool:
+	_ensure_m7_initialized()
+	var payload := {
+		"schema_version": 1,
+		"state_digest": last_digest,
+		"command_log": _live_cpp_command_log,
+		"focus_district_id": focus_district_id,
+		"syndicate_treasury": syndicate_treasury,
+		"salvage_units": salvage_units,
+		"cryo_generation": cryo_generation,
+		"missions_completed": missions_completed,
+		"operative_hp": operative_hp,
+		"operative_armor": operative_armor,
+		"operative_downed": operative_downed,
+	}
+	if _hq_screens != null:
+		payload["campaign_day"] = _hq_screens.campaign_day
+		payload["pending_defense_district"] = _hq_screens.pending_defense_district
+		payload["campaign_outcome"] = _hq_screens.campaign_outcome
+		payload["districts_state"] = _hq_screens.districts_state
+		payload["syndicates_state"] = _hq_screens.syndicates_state
+		payload["operative_organs_tiers"] = _hq_screens.operative_organs_tiers
+		payload["blueprints_state"] = _hq_screens.blueprints_state
+	var f := FileAccess.open(path, FileAccess.WRITE)
+	if f == null:
+		return false
+	f.store_string(JSON.stringify(payload, "\t"))
+	f.close()
+	if _hq_screens != null:
+		_hq_screens.status_toast = "CAMPAIGN SAVED // DIGEST %s" % last_digest
+		_hq_screens.queue_redraw()
+	return true
+
+func load_campaign(path: String = "user://wetware_campaign_save.json") -> bool:
+	_ensure_m7_initialized()
+	if not FileAccess.file_exists(path):
+		return false
+	var f := FileAccess.open(path, FileAccess.READ)
+	if f == null:
+		return false
+	var parsed: Variant = JSON.parse_string(f.get_as_text())
+	f.close()
+	if typeof(parsed) != TYPE_DICTIONARY:
+		return false
+	var d: Dictionary = parsed
+	if int(d.get("schema_version", 0)) != 1:
+		return false
+	last_digest = String(d.get("state_digest", last_digest))
+	_live_cpp_command_log.clear()
+	for cmd_item in d.get("command_log", []) as Array:
+		_live_cpp_command_log.append(String(cmd_item))
+	syndicate_treasury = int(d.get("syndicate_treasury", syndicate_treasury))
+	salvage_units = int(d.get("salvage_units", salvage_units))
+	cryo_generation = int(d.get("cryo_generation", cryo_generation))
+	missions_completed = int(d.get("missions_completed", missions_completed))
+	var hp_arr: Array = d.get("operative_hp", [])
+	for i in range(min(hp_arr.size(), operative_hp.size())):
+		operative_hp[i] = int(hp_arr[i])
+	var arm_arr: Array = d.get("operative_armor", [])
+	for i in range(min(arm_arr.size(), operative_armor.size())):
+		operative_armor[i] = int(arm_arr[i])
+	var dwn_arr: Array = d.get("operative_downed", [])
+	for i in range(min(dwn_arr.size(), operative_downed.size())):
+		operative_downed[i] = bool(dwn_arr[i])
+	if _hq_screens != null:
+		_hq_screens.campaign_day = int(d.get("campaign_day", _hq_screens.campaign_day))
+		_hq_screens.pending_defense_district = int(d.get("pending_defense_district", 0))
+		_hq_screens.campaign_outcome = String(d.get("campaign_outcome", "ACTIVE"))
+		if d.has("districts_state"):
+			_hq_screens.districts_state.clear()
+			for dist_item in d["districts_state"] as Array:
+				_hq_screens.districts_state.append((dist_item as Dictionary).duplicate(true))
+		if d.has("syndicates_state"):
+			_hq_screens.syndicates_state.clear()
+			for syn_item in d["syndicates_state"] as Array:
+				_hq_screens.syndicates_state.append((syn_item as Dictionary).duplicate(true))
+		if d.has("operative_organs_tiers"):
+			_hq_screens.operative_organs_tiers = (d["operative_organs_tiers"] as Array).duplicate(true)
+		if d.has("blueprints_state"):
+			_hq_screens.blueprints_state.clear()
+			for bp_item in d["blueprints_state"] as Array:
+				_hq_screens.blueprints_state.append((bp_item as Dictionary).duplicate(true))
+		_hq_screens._recompute_daily_nets()
+		_hq_screens.status_toast = "CAMPAIGN RESTORED // DAY %d (DIGEST %s)" % [_hq_screens.campaign_day, last_digest]
+	set_focus_district(int(d.get("focus_district_id", focus_district_id)))
+	_refresh_hud()
+	return true
+
 func valid_snapshot(data: Variant) -> bool:
 	if typeof(data) != TYPE_DICTIONARY:
 		return false
