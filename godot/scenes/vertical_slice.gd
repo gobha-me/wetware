@@ -122,6 +122,17 @@ var _sfx_streams: Dictionary = {}
 var last_played_sfx: String = ""
 var sfx_play_count: int = 0
 
+# M15 Multi-Operative Squad Selection, Cover, Operative HP/Armor & Hostile Combat AI State
+var selected_squad_indices: Array[int] = [0]
+var operative_hp: Array[int] = [100, 100, 100, 100]
+var operative_armor: Array[int] = [50, 50, 50, 50]
+var operative_downed: Array[bool] = [false, false, false, false]
+var _hostile_defenders: Array[Dictionary] = []
+var _salvage_drops: Array[Vector2] = []
+var enemy_tracer_start: Vector2 = Vector2.ZERO
+var enemy_tracer_end: Vector2 = Vector2.ZERO
+var enemy_tracer_timer: float = 0.0
+
 # Interactive VFX state rendered on foreground TacticalOverlay inside TacticalHud
 var move_target_pos: Vector2 = Vector2.ZERO
 var has_move_target: bool = false
@@ -201,6 +212,7 @@ func _ensure_m7_initialized() -> void:
 	_rebuild_meat_puppet_roster()
 	_configure_multi_pose_actors()
 	_populate_sector_grid()
+	_init_hostile_defenders()
 	_setup_spatial_audio()
 	var hq_script := load("res://scenes/hq_screens.gd") as GDScript
 	if hq_script != null:
@@ -849,30 +861,51 @@ func _process(delta: float) -> void:
 		needs_redraw = true
 
 	var op_node := _get_selected_operative_node()
+	var formation_offsets: Array[Vector2] = [Vector2(0, 0), Vector2(28, 14), Vector2(-28, 14), Vector2(0, 28)]
 	if op_node != null:
 		if move_vec.length_squared() > 0.01:
 			has_move_target = false
 			var dir := move_vec.normalized()
-			op_node.position += dir * 165.0 * real_dt
-			op_node.position.x = clampf(op_node.position.x, -400.0, 1680.0)
-			op_node.position.y = clampf(op_node.position.y, -200.0, 960.0)
-			_update_sprite_facing(op_node, dir)
+			for s_i in range(selected_squad_indices.size()):
+				var op_idx: int = selected_squad_indices[s_i]
+				if op_idx < 0 or op_idx >= OPERATIVE_NODES.size() or operative_downed[op_idx]:
+					continue
+				var member := get_node_or_null(OPERATIVE_NODES[op_idx]) as Sprite2D
+				if member == null:
+					continue
+				var next_p := _resolve_building_collision(member.position + dir * 165.0 * real_dt)
+				member.position.x = clampf(next_p.x, -400.0, 1680.0)
+				member.position.y = clampf(next_p.y, -200.0, 960.0)
+				_update_sprite_facing(member, dir)
 			_cam_target_pos = op_node.position
 			needs_redraw = true
 		elif has_move_target:
-			var to_target := move_target_pos - op_node.position
-			if to_target.length() <= 6.0:
-				op_node.position = move_target_pos
+			var any_moving := false
+			for s_i in range(selected_squad_indices.size()):
+				var op_idx: int = selected_squad_indices[s_i]
+				if op_idx < 0 or op_idx >= OPERATIVE_NODES.size() or operative_downed[op_idx]:
+					continue
+				var member := get_node_or_null(OPERATIVE_NODES[op_idx]) as Sprite2D
+				if member == null:
+					continue
+				var desired := move_target_pos + formation_offsets[s_i % formation_offsets.size()]
+				var to_target := desired - member.position
+				if to_target.length() <= 6.0:
+					member.position = _resolve_building_collision(desired)
+				else:
+					any_moving = true
+					var dir := to_target.normalized()
+					member.position = _resolve_building_collision(member.position + dir * 180.0 * real_dt)
+					_update_sprite_facing(member, dir)
+			if not any_moving:
 				has_move_target = false
-			else:
-				var dir := to_target.normalized()
-				op_node.position += dir * 180.0 * real_dt
-				_update_sprite_facing(op_node, dir)
 			needs_redraw = true
 
-	# Step procedural civilian crowd and street vehicle traffic
+	# Step procedural civilian crowd, street vehicle traffic, and hostile combat AI
 	if _replay == null:
 		_step_procedural_civilians(real_dt)
+		if step_hostile_combat_ai(real_dt):
+			needs_redraw = true
 	_step_street_vehicles(real_dt)
 
 	# Update multi-pose stride/combat rows & depth sorting across all actors
@@ -893,6 +926,10 @@ func _process(delta: float) -> void:
 
 	if tracer_timer > 0.0:
 		tracer_timer = maxf(0.0, tracer_timer - real_dt)
+		needs_redraw = true
+
+	if enemy_tracer_timer > 0.0:
+		enemy_tracer_timer = maxf(0.0, enemy_tracer_timer - real_dt)
 		needs_redraw = true
 
 	if persuade_timer > 0.0:
@@ -1365,6 +1402,21 @@ func _draw_tactical_overlay() -> void:
 		_overlay.draw_circle(te, 16.0 * (1.1 - a * 0.5), Color(tracer_color.r, tracer_color.g, tracer_color.b, a * 0.65))
 		_overlay.draw_circle(te, 6.0 * a, Color(1.0, 1.0, 1.0, a * 0.9))
 
+	if enemy_tracer_timer > 0.0:
+		var ets := _w2s(enemy_tracer_start)
+		var ete := _w2s(enemy_tracer_end)
+		var ea := clampf(enemy_tracer_timer / 0.24, 0.0, 1.0)
+		_overlay.draw_line(ets, ete, Color(1.0, 0.22, 0.30, ea), 3.2)
+		_overlay.draw_line(ets, ete, Color(1.0, 0.85, 0.85, ea * 0.85), 1.2)
+		_overlay.draw_circle(ete, 9.0 * ea, Color(1.0, 0.28, 0.22, ea * 0.75))
+
+	for s_drop in _salvage_drops:
+		var dsp := _w2s(s_drop)
+		var d_rect := Rect2(dsp.x - 10, dsp.y - 6, 20, 12)
+		_overlay.draw_rect(d_rect, Color(0.05, 0.14, 0.18, 0.92), true)
+		_overlay.draw_rect(d_rect, Color(0.98, 0.82, 0.22, 0.95), false, 1.5)
+		_overlay.draw_string(font, Vector2(d_rect.position.x + 2, d_rect.position.y + 9), "SLV", HORIZONTAL_ALIGNMENT_LEFT, 18, 8, Color(0.98, 0.86, 0.28, 1.0))
+
 	if persuade_timer > 0.0:
 		var po := _w2s(persuade_origin)
 		var progress := 1.0 - (persuade_timer / 0.55)
@@ -1532,6 +1584,8 @@ func _unhandled_input(event: InputEvent) -> void:
 				_apply_stratum_cutaway(Stratum.SPIRE)
 			KEY_TAB, KEY_Q:
 				_select_operative((selected_operative + 1) % OPERATIVE_NODES.size())
+			KEY_0, KEY_BACKSPACE:
+				select_full_squad()
 			KEY_R:
 				active_weapon_index = (active_weapon_index + 1) % WEAPON_NAMES.size()
 				_update_operative_card()
@@ -1599,6 +1653,7 @@ func _unhandled_input(event: InputEvent) -> void:
 
 func _select_operative(index: int) -> void:
 	selected_operative = clampi(index, 0, OPERATIVE_NODES.size() - 1)
+	selected_squad_indices = [selected_operative]
 	var op_node := _get_selected_operative_node()
 	if op_node != null and op_node.has_meta("stratum"):
 		_apply_stratum_cutaway(int(op_node.get_meta("stratum")) as Stratum)
@@ -1606,6 +1661,139 @@ func _select_operative(index: int) -> void:
 	if _hq_screens != null:
 		_hq_screens.queue_redraw()
 	_request_overlay_redraw()
+
+func select_full_squad() -> void:
+	selected_squad_indices = [0, 1, 2, 3]
+	_update_operative_card()
+	_request_overlay_redraw()
+
+func _init_hostile_defenders() -> void:
+	_hostile_defenders.clear()
+	var specs := [
+		["CorpSecGuard1", 100, 18, 320.0, 1],
+		["CorpSecGuard2", 100, 18, 320.0, 1],
+		["PlasmaSentryTurret", 150, 26, 360.0, 1],
+	]
+	for sp in specs:
+		var node := get_node_or_null(String(sp[0])) as Sprite2D
+		if node == null:
+			continue
+		if node.material is ShaderMaterial:
+			node.material = (node.material as ShaderMaterial).duplicate()
+		_hostile_defenders.append({
+			"name": String(sp[0]),
+			"node": node,
+			"hp": int(sp[1]),
+			"max_hp": int(sp[1]),
+			"damage": int(sp[2]),
+			"range": float(sp[3]),
+			"stratum": int(sp[4]),
+			"alive": true,
+			"cooldown": 0.8,
+		})
+
+func _resolve_building_collision(pos: Vector2) -> Vector2:
+	for idx in range(1, _city_buildings.size()):
+		var b := _city_buildings[idx]
+		if b == null or not b.visible:
+			continue
+		var center := b.position + Vector2(0, 18)
+		var delta := pos - center
+		var dist := delta.length()
+		if dist > 0.001 and dist < 42.0:
+			return center + (delta / dist) * 42.0
+	return pos
+
+func is_operative_in_cover(op_idx: int) -> bool:
+	if op_idx < 0 or op_idx >= OPERATIVE_NODES.size():
+		return false
+	var op_node := get_node_or_null(OPERATIVE_NODES[op_idx]) as Node2D
+	if op_node == null:
+		return false
+	var p := op_node.position
+	for v_entry in _street_vehicles:
+		var vn: Node2D = v_entry["node"]
+		if vn != null and vn.visible and vn.position.distance_to(p) <= 64.0:
+			return true
+	for prop_name in ["ConcreteRiotBarricade", "AutomatedCheckpointGate", "StreetVendingMachineBank"]:
+		var pn := get_node_or_null(prop_name) as Node2D
+		if pn != null and pn.visible and pn.position.distance_to(p) <= 64.0:
+			return true
+	for b in _city_buildings:
+		if b != null and b.visible:
+			var d := b.position.distance_to(p)
+			if d >= 38.0 and d <= 96.0:
+				return true
+	return false
+
+func apply_operative_damage(op_idx: int, dmg: int) -> int:
+	if op_idx < 0 or op_idx >= OPERATIVE_NODES.size() or operative_downed[op_idx]:
+		return 0
+	var effective := maxi(1, int(round(float(dmg) * (0.40 if is_operative_in_cover(op_idx) else 1.0))))
+	var armor_absorb := mini(operative_armor[op_idx], int(effective / 2))
+	operative_armor[op_idx] -= armor_absorb
+	var hp_loss := maxi(1, effective - armor_absorb)
+	operative_hp[op_idx] = maxi(0, operative_hp[op_idx] - hp_loss)
+	if operative_hp[op_idx] <= 0:
+		operative_downed[op_idx] = true
+	_update_operative_card()
+	return hp_loss
+
+func _damage_hostile_defender_at(target_pos: Vector2, dmg: int) -> bool:
+	var hit_any := false
+	for d_entry in _hostile_defenders:
+		if not bool(d_entry["alive"]):
+			continue
+		var d_node: Sprite2D = d_entry["node"]
+		if d_node == null or not d_node.visible:
+			continue
+		if d_node.position.distance_to(target_pos) <= 68.0:
+			hit_any = true
+			var next_hp: int = maxi(0, int(d_entry["hp"]) - dmg)
+			d_entry["hp"] = next_hp
+			if d_node.material is ShaderMaterial:
+				var smat := d_node.material as ShaderMaterial
+				smat.set_shader_parameter("pulse_tint", Vector3(1.0, 0.25, 0.15))
+				smat.set_shader_parameter("pulse_intensity", 0.55)
+			if next_hp <= 0:
+				d_entry["alive"] = false
+				if d_node.material is ShaderMaterial:
+					var smat := d_node.material as ShaderMaterial
+					smat.set_shader_parameter("blackout_factor", 0.32)
+				_salvage_drops.append(d_node.position)
+				salvage_units += 1
+				syndicate_treasury += 250
+				dispatch_live_cpp_command("combat_tick:%d" % focus_district_id)
+	return hit_any
+
+func step_hostile_combat_ai(real_dt: float) -> bool:
+	var fired := false
+	for d_entry in _hostile_defenders:
+		if not bool(d_entry["alive"]) or crowd_surge_active:
+			continue
+		var d_node: Sprite2D = d_entry["node"]
+		if d_node == null or not d_node.visible:
+			continue
+		var cd: float = maxf(0.0, float(d_entry["cooldown"]) - real_dt)
+		d_entry["cooldown"] = cd
+		if cd > 0.0:
+			continue
+		var max_r: float = float(d_entry["range"])
+		for op_idx in range(OPERATIVE_NODES.size()):
+			if operative_downed[op_idx]:
+				continue
+			var op_node := get_node_or_null(OPERATIVE_NODES[op_idx]) as Sprite2D
+			if op_node == null or not op_node.visible:
+				continue
+			if d_node.position.distance_to(op_node.position) <= max_r:
+				enemy_tracer_start = d_node.position + Vector2(0, -6)
+				enemy_tracer_end = op_node.position
+				enemy_tracer_timer = 0.24
+				d_entry["cooldown"] = 1.6
+				apply_operative_damage(op_idx, int(d_entry["damage"]))
+				fired = true
+				break
+	return fired
 
 func _get_selected_operative_node() -> Sprite2D:
 	return get_node_or_null(OPERATIVE_NODES[selected_operative]) as Sprite2D
@@ -1738,6 +1926,7 @@ func dispatch_live_cpp_command(cmd_stmt: String, run_cli_binary: bool = false) -
 
 	if run_cli_binary:
 		var cli_candidates := [
+			"/tmp/wetware-m15-build/wetware_cli",
 			"/tmp/wetware-m12-build/wetware_cli",
 			"/tmp/wetware-build/wetware_cli",
 			ProjectSettings.globalize_path("res://../build/wetware_cli"),
@@ -1819,6 +2008,7 @@ func _fire_active_weapon_at(target_pos: Vector2) -> void:
 		selected_operative, focus_district_id, active_weapon_index + 1, int(active_stratum)
 	])
 	_damage_street_vehicle_at(target_pos, wpn_dmg)
+	_damage_hostile_defender_at(target_pos, wpn_dmg)
 	if target_pos.distance_to(Vector2(640, 292)) < 110.0 and not tower_collapsed:
 		apply_tower_damage(wpn_dmg)
 	_request_overlay_redraw()
