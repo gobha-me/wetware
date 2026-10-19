@@ -133,6 +133,62 @@ var enemy_tracer_start: Vector2 = Vector2.ZERO
 var enemy_tracer_end: Vector2 = Vector2.ZERO
 var enemy_tracer_timer: float = 0.0
 
+# M16 6-District Sector Topologies, Spinner Insertion & Extraction Mission Loop State
+var current_district_archetype: String = "BIO-INDUSTRIAL TENEMENT RING"
+var extraction_lz_pos: Vector2 = Vector2(448, 344)
+var mission_extracted: bool = false
+var missions_completed: int = 0
+const DISTRICT_TOPOLOGIES := {
+	1: {
+		"archetype": "BIO-INDUSTRIAL TENEMENT RING",
+		"lz_grid": Vector2(-3.0, 0.0),
+		"turret_grid": Vector2(2.0, -2.0),
+		"barricade_grid": Vector2(0.0, 3.0),
+		"tenement_parity": 0,
+		"block_shift": Vector2(0.0, 0.0),
+	},
+	2: {
+		"archetype": "NEON BROADCAST PLAZA",
+		"lz_grid": Vector2(0.0, 3.0),
+		"turret_grid": Vector2(-2.0, -2.0),
+		"barricade_grid": Vector2(3.0, 0.0),
+		"tenement_parity": 1,
+		"block_shift": Vector2(24.0, -12.0),
+	},
+	3: {
+		"archetype": "ELEVATED MONORAIL TRANSIT CORRIDOR",
+		"lz_grid": Vector2(-3.0, 3.0),
+		"turret_grid": Vector2(3.0, -1.0),
+		"barricade_grid": Vector2(-2.0, 0.0),
+		"tenement_parity": 2,
+		"block_shift": Vector2(-28.0, 14.0),
+	},
+	4: {
+		"archetype": "HEAVY FOUNDRY SMELTER YARD",
+		"lz_grid": Vector2(3.0, 3.0),
+		"turret_grid": Vector2(-3.0, -2.0),
+		"barricade_grid": Vector2(0.0, -3.0),
+		"tenement_parity": 0,
+		"block_shift": Vector2(32.0, 16.0),
+	},
+	5: {
+		"archetype": "HIGH-VOLTAGE TRANSFORMER GRID",
+		"lz_grid": Vector2(0.0, -3.0),
+		"turret_grid": Vector2(2.0, 2.0),
+		"barricade_grid": Vector2(-3.0, 1.0),
+		"tenement_parity": 1,
+		"block_shift": Vector2(-20.0, -10.0),
+	},
+	6: {
+		"archetype": "FORTIFIED ZAIBATSU ARCOLOGY",
+		"lz_grid": Vector2(-3.0, -3.0),
+		"turret_grid": Vector2(1.5, 1.5),
+		"barricade_grid": Vector2(2.0, 2.0),
+		"tenement_parity": 3,
+		"block_shift": Vector2(16.0, -24.0),
+	},
+}
+
 # Interactive VFX state rendered on foreground TacticalOverlay inside TacticalHud
 var move_target_pos: Vector2 = Vector2.ZERO
 var has_move_target: bool = false
@@ -170,6 +226,7 @@ const DISTRICT_LANDMARKS := {
 var _actor_fire_timer: Dictionary = {}
 var _actor_facing_sector: Dictionary = {}
 var _city_buildings: Array[Sprite2D] = []
+var _city_building_base_pos: Array[Vector2] = []
 var _city_building_is_tenement: Array[bool] = []
 var _building_alpha: Dictionary = {}
 var _occluded_actor_ids: Dictionary = {}
@@ -525,6 +582,7 @@ func _populate_surrounding_city_blocks(floor_root: Node2D) -> void:
 	if rubble_tpl != null and rubble_tpl.material is ShaderMaterial:
 		rubble_tpl.material = (rubble_tpl.material as ShaderMaterial).duplicate()
 	_city_buildings.append(tower_tpl)
+	_city_building_base_pos.append(tower_tpl.position)
 	_city_building_is_tenement.append(false)
 	_building_alpha[tower_tpl.get_instance_id()] = 1.0
 
@@ -574,6 +632,7 @@ func _populate_surrounding_city_blocks(floor_root: Node2D) -> void:
 		b_node.set_meta("stratum", 1)
 		add_child(b_node)
 		_city_buildings.append(b_node)
+		_city_building_base_pos.append(b_node.position)
 		_city_building_is_tenement.append(is_tenement)
 		_building_alpha[b_node.get_instance_id()] = 1.0
 
@@ -1417,6 +1476,14 @@ func _draw_tactical_overlay() -> void:
 		_overlay.draw_rect(d_rect, Color(0.98, 0.82, 0.22, 0.95), false, 1.5)
 		_overlay.draw_string(font, Vector2(d_rect.position.x + 2, d_rect.position.y + 9), "SLV", HORIZONTAL_ALIGNMENT_LEFT, 18, 8, Color(0.98, 0.86, 0.28, 1.0))
 
+	if is_extraction_ready():
+		var lz_sp := _w2s(extraction_lz_pos)
+		_overlay.draw_arc(lz_sp, 34.0 * z, 0.0, TAU, 36, Color(0.22, 0.98, 0.65, 0.92), 2.4)
+		var lz_rect := Rect2(lz_sp.x - 56, lz_sp.y - 44 * z, 112, 16)
+		_overlay.draw_rect(lz_rect, Color(0.02, 0.12, 0.10, 0.92), true)
+		_overlay.draw_rect(lz_rect, Color(0.22, 0.98, 0.65, 0.95), false, 1.3)
+		_overlay.draw_string(font, Vector2(lz_rect.position.x + 4, lz_rect.position.y + 11), "EXTRACT LZ [E]", HORIZONTAL_ALIGNMENT_LEFT, 104, 9, Color(0.22, 0.98, 0.65, 1.0))
+
 	if persuade_timer > 0.0:
 		var po := _w2s(persuade_origin)
 		var progress := 1.0 - (persuade_timer / 0.55)
@@ -1586,6 +1653,8 @@ func _unhandled_input(event: InputEvent) -> void:
 				_select_operative((selected_operative + 1) % OPERATIVE_NODES.size())
 			KEY_0, KEY_BACKSPACE:
 				select_full_squad()
+			KEY_E:
+				extract_squad()
 			KEY_R:
 				active_weapon_index = (active_weapon_index + 1) % WEAPON_NAMES.size()
 				_update_operative_card()
@@ -2126,9 +2195,83 @@ func set_focus_district(district_id: int) -> void:
 			rmat.set_shader_parameter("emissive_mask", _load_tex("res://assets/tiles/%s_rubble_emissive.png" % stem))
 			rmat.set_shader_parameter("normal_map", _load_tex("res://assets/normals/%s_rubble_normal.png" % stem))
 
+	_apply_district_topology(did)
 	if _hq_screens != null:
 		_hq_screens.queue_redraw()
 	_refresh_hud()
+
+func _apply_district_topology(did: int) -> void:
+	var topo: Dictionary = DISTRICT_TOPOLOGIES.get(did, DISTRICT_TOPOLOGIES[1])
+	current_district_archetype = String(topo["archetype"])
+	var lz_g: Vector2 = topo["lz_grid"]
+	extraction_lz_pos = _grid_to_street_pos(lz_g.x, lz_g.y)
+	mission_extracted = false
+
+	var spinner := get_node_or_null("SyndicateSpinner") as Sprite2D
+	if spinner != null:
+		spinner.position = extraction_lz_pos - Vector2(0, 120)
+
+	var turret := get_node_or_null("PlasmaSentryTurret") as Sprite2D
+	if turret != null:
+		var tg: Vector2 = topo["turret_grid"]
+		turret.position = _grid_to_street_pos(tg.x, tg.y)
+
+	var barricade := get_node_or_null("ConcreteRiotBarricade") as Sprite2D
+	if barricade != null:
+		var bg: Vector2 = topo["barricade_grid"]
+		barricade.position = _grid_to_street_pos(bg.x, bg.y)
+
+	var shift: Vector2 = topo["block_shift"]
+	var parity: int = int(topo["tenement_parity"])
+	for idx in range(1, _city_buildings.size()):
+		var b_node := _city_buildings[idx]
+		if b_node == null:
+			continue
+		if idx < _city_building_base_pos.size():
+			var sign_dir := 1.0 if (idx % 2 == 0) else -1.0
+			b_node.position = _city_building_base_pos[idx] + shift * sign_dir
+			b_node.z_index = int(b_node.position.y + 42.0)
+		if idx < _city_building_is_tenement.size():
+			_city_building_is_tenement[idx] = ((idx + parity) % 2 == 0)
+	set_surrounding_blocks_collapsed(0)
+
+func deploy_squad_at_spinner() -> void:
+	mission_extracted = false
+	var offsets: Array[Vector2] = [Vector2(0, 0), Vector2(26, 13), Vector2(-26, 13), Vector2(0, 26)]
+	for i in range(OPERATIVE_NODES.size()):
+		var op := get_node_or_null(OPERATIVE_NODES[i]) as Node2D
+		if op != null:
+			op.position = extraction_lz_pos + offsets[i % offsets.size()]
+			op.visible = not operative_downed[i]
+	_cam_target_pos = extraction_lz_pos
+	_request_overlay_redraw()
+
+func is_extraction_ready() -> bool:
+	if tower_collapsed or transformer_sabotaged or convoy_intercepted or monorail_looted or crowd_surge_active:
+		return true
+	var any_alive_def := false
+	for d_entry in _hostile_defenders:
+		if bool(d_entry["alive"]):
+			any_alive_def = true
+			break
+	return not _hostile_defenders.is_empty() and not any_alive_def
+
+func extract_squad() -> bool:
+	if not is_extraction_ready():
+		return false
+	mission_extracted = true
+	missions_completed += 1
+	syndicate_treasury += 1000
+	salvage_units += 1
+	play_sfx("persuade", extraction_lz_pos)
+	dispatch_live_cpp_command("raid:%d:%d" % [focus_district_id, 1 if tower_collapsed else 0])
+	if _hq_screens != null:
+		_hq_screens.status_toast = "MISSION EXTRACTED FROM D%d (%s) // +1000 CR, +1 SALVAGE" % [
+			focus_district_id, current_district_archetype
+		]
+		set_hq_screen(1)
+	_refresh_hud()
+	return true
 
 func set_surrounding_blocks_collapsed(collapsed_count: int) -> void:
 	_ensure_m7_initialized()

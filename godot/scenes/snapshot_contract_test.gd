@@ -296,6 +296,35 @@ func _initialize() -> void:
 		quit(1)
 		return
 
+	# Verify M16: 6 distinct district sector topologies + Spinner insertion & extraction mission loop
+	var seen_archetypes := {}
+	var seen_lzs := {}
+	for did in range(1, 7):
+		sector.set_focus_district(did)
+		seen_archetypes[sector.current_district_archetype] = true
+		seen_lzs[str(sector.extraction_lz_pos)] = true
+	if seen_archetypes.size() != 6 or seen_lzs.size() != 6:
+		push_error("M16 expected 6 distinct district archetypes and LZ positions, got %d / %d" % [seen_archetypes.size(), seen_lzs.size()])
+		quit(1)
+		return
+	sector.set_focus_district(1)
+	sector.deploy_squad_at_spinner()
+	if op0.position.distance_to(sector.extraction_lz_pos) > 5.0:
+		push_error("M16 deploy_squad_at_spinner did not place Kestrel-1 at extraction_lz_pos")
+		quit(1)
+		return
+	sector.transformer_sabotaged = true
+	if not sector.is_extraction_ready():
+		push_error("M16 extraction should be ready after primary objective completion")
+		quit(1)
+		return
+	if not sector.extract_squad() or not sector.mission_extracted or sector.missions_completed < 1 or sector.get_hq_screen() != 1:
+		push_error("M16 extract_squad failed to complete extraction and transition to HQ Megacity Map")
+		quit(1)
+		return
+	sector.set_hq_screen(0)
+	sector.transformer_sabotaged = false
+
 	# Reject malformed / adversarial snapshots
 	var bad_cases: Array = [
 		null,
