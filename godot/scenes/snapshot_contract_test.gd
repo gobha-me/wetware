@@ -361,7 +361,8 @@ func _initialize() -> void:
 		return
 	sector._hq_screens.districts_state[5]["owner"] = 2
 	sector.syndicate_treasury = 0
-	sector.operative_downed = [true, true, true, true]
+	for op_i in range(4):
+		sector.operative_downed[op_i] = true
 	if sector._hq_screens.evaluate_campaign_endgame() != "DEFEAT":
 		push_error("M17 bankrupt + wiped squad did not trigger DEFEAT outcome")
 		quit(1)
