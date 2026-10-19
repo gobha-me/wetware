@@ -55,6 +55,8 @@ var active_mode: int = ScreenMode.NONE
 var selected_organ_slot: int = 0
 var selected_blueprint_idx: int = 0
 var campaign_day: int = 1
+var pending_defense_district: int = 0
+var campaign_outcome: String = "ACTIVE"
 var last_rival_raid_summary: String = "NO RIVAL COUNTER-RAIDS DETECTED"
 var status_toast: String = "HQ LINK ONLINE // SELECT DISTRICT, IMPLANT SLOT, OR R&D BLUEPRINT"
 
@@ -350,6 +352,7 @@ func raid_district(did: int, scorched: bool = false) -> bool:
 		SYN_SHORT.get(prev_owner, "RIVAL"),
 		" // SCORCHED RUBBLE" if scorched else " // ORGAN INTACT",
 	]
+	evaluate_campaign_endgame()
 	sector._refresh_hud()
 	queue_redraw()
 	return true
@@ -415,11 +418,10 @@ func advance_campaign_day() -> bool:
 			euro_districts.append(int(d["id"]))
 	if euro_districts.size() >= 3 and campaign_day % 2 == 1:
 		var raided_did: int = euro_districts[euro_districts.size() - 1]
-		last_rival_raid_summary = "DAY %d: %s RAID ON D%d REPELLED BY EUROCORP SEC-GRID (+300 CR BOUNTY)" % [
+		pending_defense_district = raided_did
+		last_rival_raid_summary = "DAY %d: %s COUNTER-RAID ON D%d // [D] DEFEND LIVE OR [A] AUTO-RESOLVE" % [
 			campaign_day, SYN_SHORT.get(rival_attacker, "RIVAL"), raided_did
 		]
-		sector.syndicate_treasury += 300
-		syndicates_state[0]["treasury"] = sector.syndicate_treasury
 	else:
 		last_rival_raid_summary = "DAY %d: RIVAL SYNDICATES FORTIFYING SECTORS // NO BREACHES" % campaign_day
 
@@ -427,9 +429,61 @@ func advance_campaign_day() -> bool:
 	status_toast = "DAY %d LEDGER SETTLED (NET %+d CR) // %s" % [
 		campaign_day, int(syndicates_state[0]["daily_net"]), last_rival_raid_summary
 	]
+	evaluate_campaign_endgame()
 	sector._refresh_hud()
 	queue_redraw()
 	return true
+
+
+func launch_defense_mission() -> bool:
+	if pending_defense_district <= 0:
+		return false
+	var def_did := pending_defense_district
+	pending_defense_district = 0
+	sector.set_focus_district(def_did)
+	sector.deploy_squad_at_spinner()
+	set_mode(ScreenMode.NONE)
+	status_toast = "DEPLOYED SQUAD TO DEFEND D%d AGAINST RIVAL COUNTER-RAID" % def_did
+	sector._refresh_hud()
+	return true
+
+
+func auto_resolve_defense_mission() -> bool:
+	if pending_defense_district <= 0:
+		return false
+	var def_did := pending_defense_district
+	pending_defense_district = 0
+	sector.syndicate_treasury += 300
+	syndicates_state[0]["treasury"] = sector.syndicate_treasury
+	sector.dispatch_live_cpp_command("combat_tick:%d" % def_did)
+	status_toast = "AUTO-RESOLVED D%d COUNTER-RAID // REPELLED (+300 CR BOUNTY)" % def_did
+	sector._refresh_hud()
+	queue_redraw()
+	return true
+
+
+func evaluate_campaign_endgame() -> String:
+	var euro_owned := 0
+	for d in districts_state:
+		if int(d["owner"]) == 1:
+			euro_owned += 1
+	if euro_owned >= 6:
+		campaign_outcome = "VICTORY"
+		status_toast = "MEGACITY HEGEMONY ACHIEVED // ALL 6 DISTRICTS UNDER EUROCORP CONTROL"
+		queue_redraw()
+		return campaign_outcome
+	var all_downed := true
+	for is_d in sector.operative_downed:
+		if not bool(is_d):
+			all_downed = false
+			break
+	if sector.syndicate_treasury <= 0 and all_downed:
+		campaign_outcome = "DEFEAT"
+		status_toast = "SYNDICATE LIQUIDATED // BANKRUPT & SQUAD WIPED"
+		queue_redraw()
+		return campaign_outcome
+	campaign_outcome = "ACTIVE"
+	return campaign_outcome
 
 
 func upgrade_selected_organ() -> bool:
@@ -594,6 +648,18 @@ func handle_key_input(keycode: int) -> bool:
 			return true
 		if keycode == KEY_T or keycode == KEY_ENTER:
 			advance_campaign_day()
+			return true
+		if keycode == KEY_Y:
+			launch_defense_mission()
+			return true
+		if keycode == KEY_H:
+			auto_resolve_defense_mission()
+			return true
+		if keycode == KEY_S:
+			sector.save_campaign()
+			return true
+		if keycode == KEY_L:
+			sector.load_campaign()
 			return true
 
 	elif active_mode == ScreenMode.RIPPERDOC_BAY:

@@ -325,6 +325,50 @@ func _initialize() -> void:
 	sector.set_hq_screen(0)
 	sector.transformer_sabotaged = false
 
+	# Verify M17: Campaign Save/Load Persistence, Playable Defense Missions & Endgame Victory/Defeat
+	var saved_digest: String = sector.last_digest
+	var saved_treasury: int = sector.syndicate_treasury
+	var tmp_save_path := "/tmp/wetware-m17-contract-save.json"
+	if not sector.save_campaign(tmp_save_path):
+		push_error("M17 save_campaign failed")
+		quit(1)
+		return
+	sector.last_digest = "0x0000000000000000"
+	sector.syndicate_treasury = 123
+	if not sector.load_campaign(tmp_save_path):
+		push_error("M17 load_campaign failed")
+		quit(1)
+		return
+	if sector.last_digest != saved_digest or sector.syndicate_treasury != saved_treasury:
+		push_error("M17 save/load round-trip did not preserve state_digest and syndicate_treasury")
+		quit(1)
+		return
+	sector._hq_screens.pending_defense_district = 2
+	if not sector._hq_screens.launch_defense_mission() or sector.focus_district_id != 2 or sector._hq_screens.pending_defense_district != 0:
+		push_error("M17 launch_defense_mission failed to deploy squad to raided district")
+		quit(1)
+		return
+	sector._hq_screens.pending_defense_district = 3
+	if not sector._hq_screens.auto_resolve_defense_mission() or sector._hq_screens.pending_defense_district != 0:
+		push_error("M17 auto_resolve_defense_mission failed")
+		quit(1)
+		return
+	for did in range(1, 7):
+		sector._hq_screens.raid_district(did, false)
+	if sector._hq_screens.campaign_outcome != "VICTORY":
+		push_error("M17 owning all 6 districts did not trigger VICTORY outcome, got %s" % sector._hq_screens.campaign_outcome)
+		quit(1)
+		return
+	sector._hq_screens.districts_state[5]["owner"] = 2
+	sector.syndicate_treasury = 0
+	sector.operative_downed = [true, true, true, true]
+	if sector._hq_screens.evaluate_campaign_endgame() != "DEFEAT":
+		push_error("M17 bankrupt + wiped squad did not trigger DEFEAT outcome")
+		quit(1)
+		return
+	sector.load_campaign(tmp_save_path)
+	sector.set_focus_district(1)
+
 	# Reject malformed / adversarial snapshots
 	var bad_cases: Array = [
 		null,
